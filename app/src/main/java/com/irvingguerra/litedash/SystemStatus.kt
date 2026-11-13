@@ -104,6 +104,7 @@ fun Volume(buttonSize: Dp, vertical: Boolean = false) {
             }
         }
         context.listen(receiver, VOLUME_CHANGED)
+        context.listen(receiver, STREAM_MUTE_CHANGED)
         onStopOrDispose {
             context.unregisterReceiver(receiver)
             open = false
@@ -248,8 +249,47 @@ private fun volumeKey(code: Int) {
     thread(name = "volume-key") { runCatching { Instrumentation().sendKeyDownUpSync(code) } }
 }
 
+/**
+ * Silenciar la música con un toque. El ícono sigue el estado real (tecla, volante, chip del estéreo),
+ * nunca uno supuesto. Con volumen fijo, o si Android no lo cambió, se manda la tecla de silencio.
+ */
+@Composable
+fun Mute(buttonSize: Dp) {
+    val c = LocalColors.current
+    val context = LocalContext.current
+    val audio = remember { context.getSystemService(AudioManager::class.java) }
+    fun read() = runCatching { audio.isStreamMute(AudioManager.STREAM_MUSIC) }.getOrDefault(false)
+    var muted by remember { mutableStateOf(read()) }
+    LifecycleStartEffect(audio) {
+        muted = read()
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                muted = read()
+            }
+        }
+        context.listen(receiver, VOLUME_CHANGED)
+        context.listen(receiver, STREAM_MUTE_CHANGED)
+        onStopOrDispose { context.unregisterReceiver(receiver) }
+    }
+    fun toggle() {
+        val before = read()
+        if (!audio.isVolumeFixed) runCatching { audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_TOGGLE_MUTE, 0) }
+        muted = read()
+        if (audio.isVolumeFixed || muted == before) volumeKey(KeyEvent.KEYCODE_VOLUME_MUTE)
+    }
+    Box(
+        Modifier.size(buttonSize).clip(CircleShape).clickable { toggle() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(if (muted) Icons.volumeMuted else Icons.volume, c.text, buttonSize * 0.45f)
+    }
+}
+
 /** El sistema lo manda al cambiar cualquier volumen; no está en el SDK público. */
 private const val VOLUME_CHANGED = "android.media.VOLUME_CHANGED_ACTION"
+
+/** Al silenciar o quitar el silencio de un volumen; tampoco está en el SDK público. */
+private const val STREAM_MUTE_CHANGED = "android.media.STREAM_MUTE_CHANGED_ACTION"
 
 /**
  * Wi-Fi o datos, audio Bluetooth conectado y ubicación encendida, en la barra.

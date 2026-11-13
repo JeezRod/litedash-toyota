@@ -170,6 +170,7 @@ private fun BarButton(item: BarItem, sizes: BarSizes, vertical: Boolean, musicOp
         // La pantalla Música (como en Tesla); marcado mientras está abierta.
         BarItem.MUSIC -> IconButton(Icons.music, actions.onMusic, size = sizes.button, background = if (musicOpen) c.surfaceHigh else Color.Transparent)
         BarItem.VOLUME -> Volume(if (vertical) sizes.volume else sizes.button, vertical = vertical)
+        BarItem.MUTE -> Mute(sizes.button)
         BarItem.NAVIGATE -> IconButton(Icons.navigate, actions.onNavigate, size = sizes.button)
         BarItem.BLUETOOTH -> IconButton(Icons.bluetooth, actions.onBluetooth, size = sizes.button)
         BarItem.PHONE -> IconButton(Icons.phone, actions.onPhone, size = sizes.button)

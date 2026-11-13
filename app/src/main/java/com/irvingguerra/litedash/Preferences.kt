@@ -149,7 +149,7 @@ enum class BarSize(val stored: String, val scale: Float) {
  */
 enum class BarItem(val stored: String) {
     APPS("apps"), MUSIC("music"), VOLUME("volume"), NAVIGATE("navigate"), BLUETOOTH("bluetooth"), PHONE("phone"),
-    VOICE("voice"), FAVORITES("favorites"), SETTINGS("settings");
+    VOICE("voice"), FAVORITES("favorites"), MUTE("mute"), SETTINGS("settings");
 
     companion object {
         fun fromStored(value: String) = entries.firstOrNull { it.stored == value }
