@@ -23,6 +23,10 @@ import com.irvingguerra.litedash.feature.music.NotificationService
 import com.irvingguerra.litedash.feature.navigation.NavigationRepository
 import com.irvingguerra.litedash.feature.dashboard.DashboardStore
 import com.irvingguerra.litedash.feature.dashboard.DashboardState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Las dependencias viven aquí (no en la actividad) porque también las usan la pantalla
@@ -43,6 +47,14 @@ class LiteDashApp : Application() {
         prefs.addBluetoothToBar()
         music.fixBluetoothLink()
         val cars = CarRepository(this, BuildConfig.CATALOG_URL)
+        // El auto que viene en la app: se instala una vez y, sin auto elegido, es el de la pantalla.
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
+            cars.seedBundled(
+                BUNDLED_CAR_ASSET, BUNDLED_CAR_ID,
+                seeded = { prefs.bundledCarSeeded }, markSeeded = { prefs.bundledCarSeeded = true },
+                chosen = { prefs.carModel }, choose = { prefs.carModel = it },
+            )
+        }
         Dependencies(
             apps = AppRepository(this).apply { opener = SplitScreen::open },
             music = music,
@@ -131,3 +143,7 @@ class LiteDashApp : Application() {
         } }, "sync-receivers").start()
     }
 }
+
+/** El auto que viene dentro de la app (assets, mismo formato que un paquete del catálogo). */
+private const val BUNDLED_CAR_ASSET = "prius-c-2014.zip"
+private const val BUNDLED_CAR_ID = "prius-c-2014"

@@ -29,7 +29,6 @@ import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.FutureTask
-import java.util.zip.ZipInputStream
 import kotlin.math.roundToInt
 
 /** Un auto del catálogo, antes de bajarlo. */
@@ -256,6 +255,28 @@ class CarRepository(private val context: Context, val catalogUrl: String) {
         disk.withLock {
             withContext(Dispatchers.IO) { p.folder.deleteRecursively() }
             changed()
+        }
+    }
+
+    /**
+     * Instala una sola vez el auto que viene dentro de la app ([assetName] en assets, mismo formato que un
+     * paquete del catálogo), sin internet, y lo pone en pantalla si [chosen] no tiene auto. Ver [BundledCar.seed].
+     * Sin el archivo o con un corte no queda nada a medias y se reintenta en el próximo arranque.
+     */
+    suspend fun seedBundled(
+        assetName: String,
+        id: String,
+        seeded: () -> Boolean,
+        markSeeded: () -> Unit,
+        chosen: () -> String?,
+        choose: (String) -> Unit,
+    ) = BundledCar.seed(id, seeded, markSeeded, chosen, choose) {
+        disk.withLock {
+            val done = withContext(Dispatchers.IO) {
+                runCatching { BundledCar.install({ context.assets.open(assetName) }, root, folderOf(id)) }.isSuccess
+            }
+            if (done) changed()
+            done
         }
     }
 
@@ -501,20 +522,7 @@ class CarRepository(private val context: Context, val catalogUrl: String) {
         error("El archivo llegó dañado")
     }
 
-    private fun unzip(zip: File, target: File) {
-        ZipInputStream(zip.inputStream().buffered()).use { input ->
-            while (true) {
-                val item = input.nextEntry ?: break
-                val file = File(target, item.name)
-                // Nada fuera de la carpeta del auto (zip con rutas "../").
-                if (!file.canonicalPath.startsWith(target.canonicalPath + File.separator)) continue
-                if (item.isDirectory) file.mkdirs() else {
-                    file.parentFile?.mkdirs()
-                    file.outputStream().use { input.copyTo(it) }
-                }
-            }
-        }
-    }
+    private fun unzip(zip: File, target: File) = zip.inputStream().buffered().use { unzipTo(it, target) }
 
     /**
      * La imagen [name] lista para dibujar a [widthPx]: el auto con su [paint] y,
@@ -690,7 +698,7 @@ class CarRepository(private val context: Context, val catalogUrl: String) {
         private fun scan(root: File): List<CarPackage> =
             root.listFiles().orEmpty().filter { it.isDirectory && '.' !in it.name }.mapNotNull(::readPackage).sortedBy { it.name }
 
-        private fun readPackage(folder: File): CarPackage? {
+        internal fun readPackage(folder: File): CarPackage? {
             val json = File(folder, CarFiles.PACKAGE_INFO).takeIf { it.exists() } ?: return null
             return runCatching {
                 val a = JSONObject(json.readText())

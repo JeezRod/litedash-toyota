@@ -4,6 +4,13 @@ Todos los cambios que nota quien usa LiteDash. Formato
 [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), versiones
 [SemVer](https://semver.org/lang/es/).
 
+## [Sin publicar]
+
+### Agregado
+- **Prius c 2014 de fábrica:** la app trae un auto propio (Toyota Prius c 2014, modelo de Bobby, CC-BY-4.0). Se instala
+  una sola vez al abrir, sin internet, y es el de la pantalla si todavía no elegiste otro; si lo eliminas no vuelve.
+  El catálogo sigue igual. El APK pesa unos 1.8 MB más.
+
 ## [1.4.147] - 2026-11-12
 
 ### Agregado

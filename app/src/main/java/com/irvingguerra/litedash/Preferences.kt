@@ -36,6 +36,7 @@ internal object PrefKeys {
     /** Int ARGB; sin guardar = el color natural. */
     const val ACCENT_COLOR = "accent_color_argb"
     const val CAR_MODEL = "car_model"
+    const val BUNDLED_CAR_SEEDED = "bundled_car_seeded"
     const val WELCOME_SEEN = "welcome_seen"
     const val WELCOME_STEP = "welcome_step"
     const val DONT_ASK_HOME = "dont_ask_home"
@@ -303,6 +304,9 @@ class Preferences(context: Context) {
 
     /** Id del auto del catálogo que se muestra; null = el sedán genérico. */
     var carModel by string(PrefKeys.CAR_MODEL)
+
+    /** El auto que viene en la app ya se instaló una vez: si lo borras, no vuelve ([CarRepository.seedBundled]). */
+    var bundledCarSeeded by bool(PrefKeys.BUNDLED_CAR_SEEDED, false)
 
     var welcomeSeen by bool(PrefKeys.WELCOME_SEEN, false)
 
