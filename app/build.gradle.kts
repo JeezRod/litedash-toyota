@@ -40,7 +40,7 @@ fun signingValue(key: String, env: String): String? = signing.getProperty(key) ?
 // Publicado en el release "catalogo" (prerelease). Para probar uno local en el
 // emulador: ./gradlew ... -Pcatalog=http://10.0.2.2:8765/catalogo.json
 val CATALOG_URL = (findProperty("catalog") as String?)
-    ?: "https://github.com/IrvingGuerra/litedash/releases/download/catalogo/catalogo.json"
+    ?: "https://github.com/JeezRod/litedash-toyota/releases/download/catalogo/catalogo.json"
 val hasSigning = signingValue("storeFile", "LITEDASH_STORE_FILE") != null
 
 android {
@@ -89,7 +89,7 @@ android {
             dimension = "channel"
             buildConfigField("String", "CHANNEL", "\"github\"")
             buildConfigField("String", "CATALOG_URL", "\"$CATALOG_URL\"")
-            buildConfigField("String", "UPDATES_URL", "\"https://api.github.com/repos/IrvingGuerra/litedash/releases?per_page=20\"")
+            buildConfigField("String", "UPDATES_URL", "\"https://api.github.com/repos/JeezRod/litedash-toyota/releases?per_page=20\"")
         }
     }
 
