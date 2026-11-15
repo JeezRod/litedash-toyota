@@ -6,6 +6,8 @@ Todos los cambios que nota quien usa LiteDash. Formato
 
 ## [Sin publicar]
 
+## [1.4.148] - 2026-11-15
+
 ### Agregado
 - **Prius c 2014 de fábrica:** la app trae un auto propio (Toyota Prius c 2014, modelo de Bobby, CC-BY-4.0). Se instala
   una sola vez al abrir, sin internet, y es el de la pantalla si todavía no elegiste otro; si lo eliminas no vuelve.
