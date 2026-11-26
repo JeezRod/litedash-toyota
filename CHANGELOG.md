@@ -8,6 +8,11 @@ Todos los cambios que nota quien usa LiteDash. Formato
 
 Vidrio líquido de verdad, Diseños con fondo de día y de noche, y un inicio más fácil de deslizar.
 
+### Del fork (JeezRod)
+- **Botón de silencio** en la barra, ahora en la barra de fábrica junto al volumen.
+- **Prius c 2014 de fábrica**, y las actualizaciones y el catálogo de autos salen de este fork.
+- Incluye todo lo de LiteDash 1.4.149 a 1.5.23 de Irving Guerra, menos el vínculo del celular con código de 6 dígitos.
+
 ### Nuevo
 - **Vidrio líquido:** las tarjetas de vidrio dejan ver tu fondo nítido y lo doblan en la orilla, como un cristal
   grueso, con un destello fino en las esquinas. Funciona desde Android 6; en pantallas de poca memoria va sin doblar.
