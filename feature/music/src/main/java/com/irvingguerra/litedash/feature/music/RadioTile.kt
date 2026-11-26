@@ -31,11 +31,13 @@ fun RadioTile(
     modifier: Modifier = Modifier,
     artwork: Boolean = true,
     skip: Boolean = true,
+    /** Un toque fuera de los botones: la pantalla Música en grande (en su pestaña). */
+    onOpen: (() -> Unit)? = null,
 ) {
     val c = LocalColors.current
     val song = repo.radio.song
     MediaTile(
-        repo, revision, modifier, song, Icons.radio, stringResource(R.string.radio), stringResource(R.string.radio_explain),
+        repo, revision, modifier, song, SoundPiece.RADIO, Icons.radio, stringResource(R.string.radio), stringResource(R.string.radio_explain),
         // Con estación, arriba si es la FM de la pantalla o la de internet.
         label = song?.let { stringResource(if (repo.radioInternet) R.string.radio else R.string.radio_fm_label) },
         text = { tall -> StationText(repo, song, tall) },
@@ -49,6 +51,7 @@ fun RadioTile(
         needsAccess = !repo.radioInternet,
         artwork = artwork,
         skip = skip,
+        onOpen = onOpen,
     )
 }
 

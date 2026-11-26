@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import android.os.Build
 import android.service.notification.StatusBarNotification
 import com.irvingguerra.litedash.feature.updater.Updater
+import com.irvingguerra.litedash.core.vehicle.Signal
 import com.irvingguerra.litedash.core.vehicle.VehicleBus
 import com.irvingguerra.litedash.feature.obd.ObdRepository
 import com.irvingguerra.litedash.feature.tpms.CarTires
@@ -28,6 +29,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
+/** Más rápido que esto (GPS u OBD), el auto se mueve. */
+private const val MOVING_KMH = 10f
+
 /**
  * Las dependencias viven aquí (no en la actividad) porque también las usan la pantalla
  * dividida y el servicio de avisos (este solo si ya existen). Todo es perezoso.
@@ -46,6 +50,9 @@ class LiteDashApp : Application() {
         music.isProjection = ::isProjectionPackage
         prefs.addBluetoothToBar()
         music.fixBluetoothLink()
+        // Abrir una app de fábrica encima (una receta de sonido) espera a que el auto vaya a 10 km/h o menos. Sin dato
+        // de velocidad (ningún widget usa el GPS ni hay OBD) no se sabe: se toma como en movimiento.
+        music.moving = { (bus.value(Signal.SPEED) ?: Float.MAX_VALUE) > MOVING_KMH }
         val cars = CarRepository(this, BuildConfig.CATALOG_URL)
         // El auto que viene en la app: se instala una vez y, sin auto elegido, es el de la pantalla.
         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {

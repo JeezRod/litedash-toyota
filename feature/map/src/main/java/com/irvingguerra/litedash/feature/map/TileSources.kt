@@ -32,6 +32,9 @@ interface TileSource {
     /** Pedir comprimido y guardarlo así (se descomprime al usarlo). */
     val gzip: Boolean
 
+    /** Lo más cerca que se puede ver (las de OSM llegan al 19; las vectoriales se dibujan a cualquier zoom). */
+    val maxZoom: Int get() = MAX_ZOOM
+
     /** La tesela que hay que bajar para mostrar [key] (las vectoriales llegan hasta el zoom 14). */
     fun origin(key: Long): Long = key
 
@@ -40,7 +43,16 @@ interface TileSource {
 
     /** La imagen de [key] a partir de lo bajado de [origin]; null = lo bajado no sirve (o vino vacío y no hay qué dibujar). */
     fun decode(data: ByteArray, key: Long, origin: Long): ImageBitmap?
+
+    /**
+     * Las calles con nombre de la tesela [origin] (ya leída para dibujarla), con su lado en unidades ([VectorTile.extent]);
+     * null = no se sabe (las imágenes de OSM ya traen los nombres dibujados).
+     */
+    fun names(origin: Long): TileNames? = null
 }
+
+/** Las calles con nombre de una tesela y el lado de la tesela en sus unidades. */
+class TileNames(val extent: Int, val roads: List<RoadName>)
 
 /** Las teselas de OpenStreetMap ya dibujadas (con todo: calles, negocios, nombres). */
 object OsmTiles : TileSource {
@@ -48,6 +60,7 @@ object OsmTiles : TileSource {
     override val attribution = "© OpenStreetMap"
     override val recolor = true
     override val gzip = false
+    override val maxZoom = 19
 
     override fun url(origin: Long) = "https://tile.openstreetmap.org/${keyZ(origin)}/${keyX(origin)}/${keyY(origin)}.png"
 
@@ -85,6 +98,11 @@ class VectorTiles(
      */
     private val parsed = LruCache<Long, VectorTile>(8)
 
+    /** Los nombres de las calles por tesela origen: pesan poco y se guardan más que las teselas leídas. */
+    private val names = LruCache<Long, TileNames>(NAMES_KEPT)
+
+    override fun names(origin: Long): TileNames? = names.get(origin)
+
     /** La dirección de los datos (de [template]) en memoria, cuándo se supo y el último intento fallido. */
     private var template: String? = null
     private var templateRead = false
@@ -102,7 +120,12 @@ class VectorTiles(
         template()?.replace("{z}", "${keyZ(origin)}")?.replace("{x}", "${keyX(origin)}")?.replace("{y}", "${keyY(origin)}")
 
     override fun decode(data: ByteArray, key: Long, origin: Long): ImageBitmap? {
-        val tile = parsed.get(origin) ?: (parseVectorTile(unzip(data)) ?: return null).also { parsed.put(origin, it) }
+        // Edificios y nombres solo de las teselas del 14 (cerca); las del 12–13 son lo lejano del mapa inclinado.
+        val near = keyZ(origin) == DATA_ZOOM
+        val tile = parsed.get(origin) ?: (parseVectorTile(unzip(data), withBuildings = near) ?: return null).also {
+            parsed.put(origin, it)
+            if (near) names.put(origin, TileNames(it.extent, it.names))
+        }
         val z = keyZ(key)
         val sub = 1 shl (z - keyZ(origin))
         val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.RGB_565)
@@ -117,7 +140,7 @@ class VectorTiles(
         canvas.translate(-sx * sizePx.toFloat(), -sy * sizePx.toFloat())
         canvas.scale(scale, scale)
         // Grosor en px de pantalla → en unidades de la tesela; un poco más delgado al alejarse.
-        val zoomFactor = 2.0.pow(0.7 * (z - 16)).toFloat().coerceIn(0.35f, 1.6f)
+        val zoomFactor = 2.0.pow(0.7 * (z - 16)).toFloat().coerceIn(0.35f, 4.5f)
         // Solo lo que toca este pedazo (más el grosor de la calle más ancha): del 17 son 64 pedazos por tesela.
         val window = t.extent.toFloat() / sub
         val margin = (ROAD_WIDTH[0] + CASING) * density * zoomFactor / scale
@@ -133,6 +156,8 @@ class VectorTiles(
         }
         area(t.parks, palette.park)
         area(t.water, palette.water)
+        // Las casas solo de cerca: más lejos son puntitos que ensucian.
+        if (z >= BUILDINGS_ZOOM) area(t.buildings, palette.building)
         val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeCap = Paint.Cap.ROUND
@@ -186,6 +211,8 @@ class VectorTiles(
 
     private companion object {
         const val DATA_ZOOM = 14
+        const val BUILDINGS_ZOOM = 16
+        const val NAMES_KEPT = 48
         const val TEMPLATE_MS = 7 * 86_400_000L
         const val TEMPLATE_RETRY_MS = 10 * 60_000L
         const val TILEJSON = "https://tiles.openfreemap.org/planet"
@@ -197,15 +224,18 @@ class VectorTiles(
 }
 
 /** Los colores del mapa minimalista (ARGB). [roads] en el orden de [RoadTier]. */
-class MinimalPalette(val background: Int, val water: Int, val park: Int, val casing: Int, val roads: IntArray) {
+class MinimalPalette(val background: Int, val water: Int, val park: Int, val building: Int, val casing: Int, val roads: IntArray) {
     companion object {
+        // Autopistas en ámbar y avenidas un poco más claras: se ve por dónde se cruza la ciudad.
         val LIGHT = MinimalPalette(
-            background = 0xFFE9EBEF.toInt(), water = 0xFFC6D4E4.toInt(), park = 0xFFDCE6D7.toInt(), casing = 0xFFD3D6DC.toInt(),
-            roads = intArrayOf(0xFFF6D9A6.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt(), 0xFFF7F8FA.toInt()),
+            background = 0xFFE9EBEF.toInt(), water = 0xFFC2D3E6.toInt(), park = 0xFFD5E4CF.toInt(), building = 0xFFDCDEE3.toInt(),
+            casing = 0xFFCFD3DA.toInt(),
+            roads = intArrayOf(0xFFF7CF86.toInt(), 0xFFFCE9C4.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt(), 0xFFF7F8FA.toInt()),
         )
         val DARK = MinimalPalette(
-            background = 0xFF1B1C20.toInt(), water = 0xFF1D2836.toInt(), park = 0xFF1E2620.toInt(), casing = 0xFF16171A.toInt(),
-            roads = intArrayOf(0xFF6E5A35.toInt(), 0xFF4A4C53.toInt(), 0xFF3F4148.toInt(), 0xFF34363C.toInt(), 0xFF2C2E33.toInt()),
+            background = 0xFF1B1C20.toInt(), water = 0xFF1C2A3B.toInt(), park = 0xFF1D2A20.toInt(), building = 0xFF24262B.toInt(),
+            casing = 0xFF141518.toInt(),
+            roads = intArrayOf(0xFF8A6A33.toInt(), 0xFF5E5442.toInt(), 0xFF45474E.toInt(), 0xFF383A40.toInt(), 0xFF2E3035.toInt()),
         )
     }
 }

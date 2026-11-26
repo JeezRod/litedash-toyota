@@ -171,7 +171,7 @@
     <string name="hide_status_bar_help">The strip at the very top with Android\'s time and notifications (not LiteDash\'s). Swipe down from the top to see it for a moment.</string>
     <string name="stats_title">Statistics</string>
     <string name="stats_switch">Count this screen (anonymous)</string>
-    <string name="stats_help">Once a day it sends a random number, the version and where you got it (GitHub or Play), Android, language, screen size, since when you use LiteDash and which built-in radio and Bluetooth your screen has, to know how many people use LiteDash. No location, accounts or personal data.</string>
+    <string name="stats_help">Once a day it sends a random number, the version and where you got it (GitHub or Play), Android, language, screen size, since when you use LiteDash and which built-in radio and Bluetooth your screen has and which sound setting worked on it, to know how many people use LiteDash. No location, accounts or personal data.</string>
     <string name="back">Back</string>
     <string name="next">Next</string>
     <string name="skip">Skip</string>
@@ -213,14 +213,14 @@
     <string name="language_system">Follow system</string>
     <string name="map_help">The app the Navigate widget opens. While navigating, it shows the next turn (it uses the same notification access as music).</string>
     <string name="map_no_apps">Install Waze or Google Maps to navigate from LiteDash.</string>
+    <string name="map_external">Use external app for shortcuts</string>
+    <string name="map_external_help">The bar button, the steering wheel button and the Map widget open your maps app. Off, they open the LiteDash map full screen.</string>
     <string name="music">Music</string>
     <string name="music_help">It is what plays in the Music widget, and play wakes it up. With no app chosen, it shows whatever is playing (radio has its own widget).</string>
     <string name="template_cards">Cards below</string>
     <string name="template_columns">Three columns</string>
     <string name="template_panel">Full panel</string>
-    <string name="screens_small">Small screens (7\")</string>
-    <string name="screens_medium">Medium screens (9–10\")</string>
-    <string name="screens_large">Large screens (11\" or more)</string>
+    <string name="screens_horizontal">Horizontal screens</string>
     <string name="screens_vertical">Vertical screens</string>
     <string name="your_screen">· Your screen</string>
     <string name="recommended">Recommended</string>
@@ -374,6 +374,9 @@
     <string name="obd_connect">Connect</string>
     <string name="obd_bluetooth">Bluetooth</string>
     <string name="obd_wifi">Wi-Fi</string>
+    <string name="obd_local_network">Your adapter uses Wi‑Fi: Android asks you to let LiteDash use the local network (Nearby devices).</string>
+    <string name="local_network_allow">Allow</string>
+    <string name="local_network_settings">Permissions</string>
     <string name="obd_allow_bluetooth">Allow Bluetooth</string>
     <string name="obd_no_paired">No paired adapters. Pair yours in Android Settings → Bluetooth (the PIN is usually 1234 or 0000).</string>
     <string name="obd_reading">Reading the car…</string>
@@ -767,6 +770,9 @@
     <string name="pro_expired">Connect to the internet to keep the developer code</string>
     <string name="music_mode_title">How you listen to music</string>
     <string name="music_mode_help">Pick one: it is what plays in the Music widget. Switching pauses the previous one.</string>
+    <string name="sound_calibration">Calibrate sound</string>
+    <string name="sound_calibration_help">How LiteDash gets your screen\'s Bluetooth and radio to play. It\'s tested on its own the first time they play; if something stops playing, calibrate again.</string>
+    <string name="sound_calibrate_again">Calibrate again</string>
     <string name="image_no_permission">Without the files permission LiteDash can\'t browse the storage.</string>
     <string name="open_on_boot">Open LiteDash on startup</string>
     <string name="open_on_boot_help">For head units that bring back their factory launcher when the car turns off and on: LiteDash comes to the front by itself. If your head unit has a “Default launcher” option in its settings, choose LiteDash there too.</string>

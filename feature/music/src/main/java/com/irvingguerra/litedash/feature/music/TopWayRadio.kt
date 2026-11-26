@@ -1,5 +1,7 @@
 package com.irvingguerra.litedash.feature.music
 
+import android.annotation.SuppressLint
+import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
@@ -119,6 +121,25 @@ internal class TopWayRadio(onState: (BroadcastMeta) -> Unit, private val trace: 
         publish()
     }
 
+    /**
+     * La música del Bluetooth de TopWay (`com.tw.bt`, con chip propio): el MCU solo la deja pasar a las bocinas
+     * con su fuente (8), y eso lo pide la app de fábrica al entrar a su Música. Se pide igual que ella: actividad,
+     * fuente de audio y foco (visto en el Lancer de Irving, 2026-11-13: `40448 8`, `769 8`).
+     */
+    fun takeBluetooth() {
+        activity(SOURCE_BT)
+        write(AUDIO, 0xC0, SOURCE_BT)
+        write(FOCUS, 0xC0, SOURCE_BT)
+        trace("topway bluetooth: fuente $SOURCE_BT")
+    }
+
+    /** Suelta la fuente del Bluetooth (como la radio al pausar): el MCU regresa al audio de Android. */
+    fun releaseBluetooth() {
+        activity(SOURCE_BT or RELEASE)
+        write(FOCUS, 0xC0, SOURCE_BT or RELEASE)
+        trace("topway bluetooth: suelta")
+    }
+
     /** La "actividad" va con write de dos números (como la radio de fábrica); si no existe, con tres. */
     private fun activity(value: Int) {
         val u = util ?: return
@@ -138,6 +159,10 @@ internal class TopWayRadio(onState: (BroadcastMeta) -> Unit, private val trace: 
     }
 
     companion object {
+        /** La app de radio de fábrica. */
+        const val PACKAGE = "com.tw.radio"
+        /** Marca de "abriendo TopWay" en el store de música: si se queda puesta, la app se cerró al abrirlo. */
+        private const val KEY_OPENING = "topway_opening"
         private const val CLASS = "android.tw.john.TWUtil"
         private const val RADIO = 1025
         private const val STATION = 1026
@@ -148,10 +173,33 @@ internal class TopWayRadio(onState: (BroadcastMeta) -> Unit, private val trace: 
         private const val SOURCE_RADIO = 1
         /** El número de la radio en otras TopWay (OpenRath). */
         private const val SOURCE_RADIO_ALT = 0x0A
+        /** La música del Bluetooth de fábrica (`com.tw.bt`). */
+        private const val SOURCE_BT = 8
         private const val RELEASE = 0x80
         private const val BAND_AM = 2
 
         /** La pantalla trae el enlace de TopWay. */
         val available: Boolean by lazy { runCatching { Class.forName(CLASS) }.isSuccess }
+
+        /** Alguna vez la app de la pantalla se cerró al abrir el enlace (desde entonces ya no se abre). */
+        fun crashedBefore(store: SharedPreferences) = store.getBoolean(KEY_OPENING, false)
+
+        /**
+         * Abre un enlace con seguro: se marca antes de abrir (y queda escrito ya) y se quita al terminar; si el
+         * firmware tumba la app a medio abrir, la marca se queda y no se vuelve a intentar. null si no abre. En el
+         * hilo de los perfiles (reflexión y disco).
+         */
+        @SuppressLint("ApplySharedPref") // commit a propósito: debe quedar escrito antes de abrir
+        fun openGuarded(store: SharedPreferences, onState: (BroadcastMeta) -> Unit, trace: (String) -> Unit): TopWayRadio? {
+            if (crashedBefore(store)) {
+                trace("topway apagado: la app se cerró al abrirlo")
+                return null
+            }
+            store.edit().putBoolean(KEY_OPENING, true).commit()
+            val tw = TopWayRadio(onState, trace)
+            val opened = tw.open()
+            store.edit().putBoolean(KEY_OPENING, false).apply()
+            return tw.takeIf { opened }
+        }
     }
 }

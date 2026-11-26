@@ -36,6 +36,7 @@ import com.irvingguerra.litedash.core.ui.Typography
 import com.irvingguerra.litedash.feature.dashboard.DashboardState
 import com.irvingguerra.litedash.feature.music.AppProbe
 import com.irvingguerra.litedash.feature.music.MusicRepository
+import com.irvingguerra.litedash.feature.music.SoundPiece
 import com.irvingguerra.litedash.feature.music.SystemSource
 import com.irvingguerra.litedash.feature.obd.ObdRepository
 import kotlinx.coroutines.Dispatchers
@@ -102,6 +103,15 @@ private sealed interface ReportState {
     data class Sent(val code: String) : ReportState
 }
 
+/** El reporte que pidió el aviso "No encontramos cómo hacerlo sonar aquí"; lo toma la tarjeta al abrirse. Solo en memoria. */
+private var pendingSound: SoundPiece? = null
+
+/** "Enviar un reporte" ya en "Música · Bluetooth" (o "Radio · FM") con "No suena": Ajustes → Sistema → Tu pantalla. */
+internal fun openSoundReport(piece: SoundPiece) {
+    pendingSound = piece
+    selectTab(SYSTEM_TABS, SystemTab.YOUR_SCREEN.ordinal)
+}
+
 private const val NOTE_MAX = 500
 private const val INFO_MAX = 20_000
 private const val REPORT_GAP_MS = 60_000L
@@ -116,9 +126,10 @@ internal fun SendReport(music: MusicRepository, pro: ProAccess, dashboard: Dashb
     val c = LocalColors.current
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
-    var module by remember { mutableStateOf<ReportModule?>(null) }
-    var detail by remember { mutableStateOf<ReportDetail?>(null) }
-    var problem by remember { mutableStateOf<ReportProblem?>(null) }
+    val sound = remember { pendingSound.also { pendingSound = null } }
+    var module by remember { mutableStateOf(sound?.let { if (it == SoundPiece.MUSIC) ReportModule.MUSIC else ReportModule.RADIO }) }
+    var detail by remember { mutableStateOf(sound?.let { if (it == SoundPiece.MUSIC) ReportDetail.HEAD_BLUETOOTH else ReportDetail.FM }) }
+    var problem by remember { mutableStateOf(sound?.let { ReportProblem.SILENT }) }
     var note by remember { mutableStateOf("") }
     var state by remember { mutableStateOf<ReportState>(ReportState.Idle) }
 
@@ -271,6 +282,7 @@ private fun systemInfo(context: Context, pro: Boolean, layout: String, musicInfo
         appendLine("Plataforma: ${Build.HARDWARE} · ${Build.BOARD}")
         appendLine("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
         appendLine("Pantalla: ${m.widthPixels}×${m.heightPixels} px · ${m.densityDpi} dpi")
+        appendLine(MainActivity.windowInfo)
         appendLine(layout)
         appendLine(BootLaunch.describe(context, context.getSharedPreferences(PrefKeys.FILE, Context.MODE_PRIVATE).getBoolean(PrefKeys.OPEN_ON_BOOT, false)))
         appendLine("Memoria: ${memoryMb(context)} MB")

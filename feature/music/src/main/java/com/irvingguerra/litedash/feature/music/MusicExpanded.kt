@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -36,8 +37,8 @@ import com.irvingguerra.litedash.core.ui.LocalColors
 import com.irvingguerra.litedash.core.ui.Typography
 
 /**
- * La música en grande, sin salir de LiteDash: el método elegido en Ajustes (Archivos, Bluetooth o
- * App, uno solo), carátula, barra para adelantar, y los botones propios de la app (en Spotify: me
+ * La música en grande, sin salir de LiteDash: arriba de dónde suena (Archivos, Bluetooth o App, uno
+ * solo; ahí mismo se cambia), carátula, barra para adelantar, y los botones propios de la app (en Spotify: me
  * gusta, aleatorio, repetir). Ancha pone la carátula a un lado; angosta, arriba. [browser] es la
  * biblioteca de Archivos del reproductor propio: se abre con el botón de lista o al dar play sin
  * nada que sonar; recibe qué hacer cuando ya se eligió algo.
@@ -58,12 +59,14 @@ fun MusicExpanded(
     OnFilesEmpty(repo, files, remember { { browsing = true } })
     ExpandedCard(repo, modifier, tint = song) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ModeTitle(repo, song, Modifier.weight(1f))
+            // Lo que sobra es del selector; los botones, siempre a la derecha.
+            Box(Modifier.weight(1f)) { ModePicker(repo) }
             if (files) HeaderButton(if (browsing) Icons.music else Icons.list) { browsing = !browsing }
             val app = song?.pkg?.ifEmpty { null } ?: repo.modeApp
             if (app != null && !repo.isOwn(app)) HeaderButton(Icons.openExternal) { repo.openApp() }
         }
         Spacer(Modifier.height(16.dp))
+        repo.soundCheckFor(SoundPiece.MUSIC)?.let { SoundCheckPrompt(repo, it, Modifier.fillMaxWidth().padding(bottom = 16.dp)) }
         if (browsing) {
             browser { browsing = false }
             return@ExpandedCard
@@ -83,20 +86,35 @@ fun MusicExpanded(
 @Composable
 private fun ColumnScope.PlayerControls(repo: MusicRepository, song: Song?, fit: ControlsFit) {
     val compact = fit != ControlsFit.FULL
+    val wide = LocalWide.current
+    // Ancha, los botones propios de la app (me gusta, aleatorio…) van arriba de la barra, como en los reproductores.
+    if (wide && song != null && song.actions.isNotEmpty()) {
+        Spacer(Modifier.height(12.dp))
+        AppActions(repo, song)
+    }
     if (fit != ControlsFit.MINI && song != null && song.durationMs > 0) {
-        Spacer(Modifier.height(if (compact) 10.dp else 20.dp))
+        Spacer(Modifier.height(if (compact) 10.dp else if (wide) 24.dp else 20.dp))
         TimeBar(repo, song)
     }
-    Spacer(Modifier.height(if (compact) 8.dp else 16.dp))
+    Spacer(Modifier.height(if (compact) 8.dp else if (wide) 20.dp else 16.dp))
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        if (compact) Controls(repo, song?.playing == true, loading = song?.buffering == true, size = 52.dp, playSize = 60.dp, gap = 8.dp)
-        else Controls(repo, song?.playing == true, loading = song?.buffering == true, size = 64.dp, playSize = 76.dp, gap = 12.dp)
-    }
-    if (fit != ControlsFit.MINI && song != null && song.actions.isNotEmpty()) {
-        Spacer(Modifier.height(if (compact) 4.dp else 8.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            for (a in song.actions.take(5)) ActionButton(a) { repo.action(a) }
+        when {
+            compact -> Controls(repo, song?.playing == true, loading = song?.buffering == true, size = 52.dp, playSize = 60.dp, gap = 8.dp)
+            wide -> Controls(repo, song?.playing == true, loading = song?.buffering == true, size = 72.dp, playSize = 88.dp, gap = 36.dp)
+            else -> Controls(repo, song?.playing == true, loading = song?.buffering == true, size = 64.dp, playSize = 76.dp, gap = 12.dp)
         }
+    }
+    if (!wide && fit != ControlsFit.MINI && song != null && song.actions.isNotEmpty()) {
+        Spacer(Modifier.height(if (compact) 4.dp else 8.dp))
+        AppActions(repo, song)
+    }
+}
+
+/** Los botones propios de la app (en Spotify: me gusta, aleatorio, repetir). */
+@Composable
+private fun AppActions(repo: MusicRepository, song: Song) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+        for (a in song.actions.take(5)) ActionButton(a) { repo.action(a) }
     }
 }
 
@@ -160,7 +178,7 @@ private fun TimeBar(repo: MusicRepository, song: Song) {
     }
 }
 
-private fun formatTime(ms: Long): String {
+internal fun formatTime(ms: Long): String {
     val s = (ms / 1000).coerceAtLeast(0)
     return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
 }

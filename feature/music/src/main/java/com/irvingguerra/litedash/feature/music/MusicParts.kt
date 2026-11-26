@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,6 +50,7 @@ import com.irvingguerra.litedash.core.ui.Label
 import com.irvingguerra.litedash.core.ui.LocalColors
 import com.irvingguerra.litedash.core.ui.LocalPlainCard
 import com.irvingguerra.litedash.core.ui.TilePadding
+import com.irvingguerra.litedash.core.ui.Segmented
 import com.irvingguerra.litedash.core.ui.Typography
 
 // Partes que comparten la pieza de música y la música en grande.
@@ -129,17 +131,16 @@ fun MusicMode.label(): String = stringResource(
 )
 
 /**
- * Qué se está escuchando, arriba de la música en grande: el método elegido en Ajustes (uno solo; ahí
- * se cambia). Con App, el nombre de tu app (o de la que suena).
+ * De dónde suena la música, arriba de la música en grande: Archivos, Bluetooth o App (con App, el nombre de
+ * tu app), y ahí mismo se cambia (lo mismo que en Ajustes → Apps → Música).
  */
 @Composable
-internal fun ModeTitle(repo: MusicRepository, song: Song?, modifier: Modifier = Modifier) {
-    val c = LocalColors.current
-    val text = when (repo.mode) {
-        MusicMode.APP -> (repo.preferred ?: song?.pkg?.ifEmpty { null })?.let(repo::appName)?.ifBlank { null } ?: MusicMode.APP.label()
-        else -> repo.mode.label()
-    }
-    Label(text.uppercase(), Typography.label, c.textMuted, 1, modifier)
+internal fun ModePicker(repo: MusicRepository, modifier: Modifier = Modifier) {
+    val app = repo.preferred?.let(repo::appName)?.ifBlank { null }
+    Segmented(
+        MusicMode.entries.map { it to if (it == MusicMode.APP && app != null) app else it.label() },
+        repo.mode, { repo.mode = it }, modifier, check = true,
+    )
 }
 
 /** La vista cuenta como usuaria de [repo] mientras está en pantalla (escucha solo entonces). */
@@ -154,7 +155,7 @@ internal fun UseRepo(repo: MusicRepository) {
 /**
  * La base de las piezas Música y Radio. Se acomoda a su tamaño: chica es una fila con carátula
  * y play (o los tres botones si cabe); alta y no tan ancha, carátula arriba y lo demás abajo.
- * [revision] cambia al volver a la
+ * Un toque fuera de los botones la abre en grande ([onOpen]). [revision] cambia al volver a la
  * app, para notar si el usuario acaba de dar el permiso. [label] es la etiqueta chica arriba del
  * texto (de dónde suena; se omite si no cabe), [text] lo escrito y [controls] los botones (con
  * [Modifier] y si van compactos). Con [tinted], la carátula tiñe la tarjeta. La biblioteca y las
@@ -166,6 +167,8 @@ internal fun MediaTile(
     revision: Int,
     modifier: Modifier,
     song: Song?,
+    /** Qué pieza es: si la calibración del sonido le pregunta algo, va en su lugar ([SoundCheckPrompt]). */
+    piece: SoundPiece,
     icon: ImageVector,
     title: String,
     explain: String,
@@ -178,11 +181,16 @@ internal fun MediaTile(
     artwork: Boolean = true,
     skip: Boolean = true,
     tinted: Boolean = false,
+    /** Un toque fuera de los botones: la pantalla Música en grande. */
+    onOpen: (() -> Unit)? = null,
 ) {
     UseRepo(repo)
     val permission = remember(revision, needsAccess) { !needsAccess || repo.hasPermission().also { if (it) repo.recheck() } }
-    Card(modifier.fillMaxSize()) {
+    Card(modifier.fillMaxSize(), onClick = onOpen.takeIf { permission }) {
         if (!permission) return@Card NoPermission(repo, icon, title, explain)
+        repo.soundCheckFor(piece)?.let { check ->
+            return@Card Box(Modifier.fillMaxSize().padding(TilePadding), contentAlignment = Alignment.CenterStart) { SoundCheckPrompt(repo, check) }
+        }
         // La llave es la canción, no el Bitmap: cada play o pausa trae otra instancia de la misma carátula.
         if (tinted && !LocalPlainCard.current) song?.artwork?.let { ArtworkTint(it, "${song.pkg}|${song.title}|${song.artist}") }
         BoxWithConstraints(Modifier.fillMaxSize().padding(TilePadding)) {
@@ -404,12 +412,15 @@ internal fun ColumnScope.NowPlaying(
                     controls(ControlsFit.MINI)
                 }
             }
+            // Con lugar (como un reproductor de escritorio): carátula grande y, al lado, todo centrado y con aire.
             wide -> Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                Artwork(song, Modifier.size(minOf(height, width * 0.4f)), Radius.card, icon)
-                Spacer(Modifier.width(20.dp))
-                Column(Modifier.weight(1f)) {
-                    title(Modifier.fillMaxWidth(), fit != ControlsFit.FULL)
-                    controls(fit)
+                Artwork(song, Modifier.size(minOf(height, width * 0.45f)), Radius.card, icon)
+                Spacer(Modifier.width(32.dp))
+                Column(Modifier.weight(1f).padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    CompositionLocalProvider(LocalWide provides (fit == ControlsFit.FULL)) {
+                        title(Modifier.fillMaxWidth(), fit != ControlsFit.FULL)
+                        controls(fit)
+                    }
                 }
             }
             above >= ARTWORK_ABOVE_MIN -> Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -452,10 +463,27 @@ internal fun ExpandedTitle(repo: MusicRepository, song: Song?, opening: String?,
     Column(modifier) { BigTitle(title, subtitle, error != null, compact) }
 }
 
+/**
+ * La vista en grande con lugar de sobra ([NowPlaying] ancha): título más grande y centrado, barra de avance con
+ * tiempos y botones con más aire.
+ */
+internal val LocalWide = compositionLocalOf { false }
+
 /** Título y subtítulo grandes, con dos líneas reservadas cada uno: los botones no se mueven. */
 @Composable
 internal fun BigTitle(title: String, subtitle: String, error: Boolean, compact: Boolean) {
     val c = LocalColors.current
+    if (LocalWide.current && !compact) {
+        val center = TextAlign.Center
+        Box(Modifier.fillMaxWidth().heightIn(min = 84.dp), contentAlignment = Alignment.BottomCenter) {
+            Label(title, Typography.title.copy(fontSize = 34.sp, lineHeight = 40.sp, textAlign = center), maxLines = 2)
+        }
+        Spacer(Modifier.height(6.dp))
+        Box(Modifier.fillMaxWidth().heightIn(min = 28.dp), contentAlignment = Alignment.TopCenter) {
+            Label(subtitle, Typography.subtitle.copy(fontSize = 20.sp, textAlign = center), if (error) c.danger else c.textMuted, maxLines = 1)
+        }
+        return
+    }
     if (compact) {
         // Sin lugar: una línea de cada uno y sin reservar espacio.
         Label(title, Typography.title.copy(fontSize = 22.sp), maxLines = 1)

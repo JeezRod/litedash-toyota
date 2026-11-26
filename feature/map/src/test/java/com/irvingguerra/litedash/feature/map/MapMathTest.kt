@@ -37,26 +37,6 @@ class MapMathTest {
     }
 
     @Test
-    fun zoomBySpeed() {
-        assertEquals(17, autoZoom(null, 17))
-        assertEquals(17, autoZoom(20f, 17))
-        assertEquals(16, autoZoom(40f, 17))
-        assertEquals(15, autoZoom(90f, 17))
-        // Cerca del umbral no brinca: a 33 sigue en 16, a 28 regresa a 17.
-        assertEquals(16, autoZoom(33f, 16))
-        assertEquals(17, autoZoom(28f, 16))
-        assertEquals(15, autoZoom(68f, 15))
-        assertEquals(16, autoZoom(60f, 15))
-    }
-
-    @Test
-    fun tapCyclesZoom() {
-        assertEquals(16, nextZoom(17))
-        assertEquals(14, nextZoom(15))
-        assertNull(nextZoom(14))
-    }
-
-    @Test
     fun cacheControl() {
         val now = 1_000_000L
         assertEquals(now + 604_800_000, expiresAt(now, "max-age=604800, stale-while-revalidate=604800", null))
