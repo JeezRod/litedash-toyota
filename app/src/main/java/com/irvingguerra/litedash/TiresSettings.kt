@@ -2,9 +2,6 @@ package com.irvingguerra.litedash
 
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -16,8 +13,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -39,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -61,8 +59,9 @@ import com.irvingguerra.litedash.core.ui.Radius
 import com.irvingguerra.litedash.core.ui.Segmented
 import com.irvingguerra.litedash.core.ui.SwitchRow
 import com.irvingguerra.litedash.core.ui.Typography
+import com.irvingguerra.litedash.core.vehicle.bleScanPermission
 import com.irvingguerra.litedash.feature.dashboard.TileTypes
-import com.irvingguerra.litedash.feature.tpms.BleProblem
+import com.irvingguerra.litedash.feature.obd.ObdState
 import com.irvingguerra.litedash.feature.tpms.PairState
 import com.irvingguerra.litedash.feature.tpms.PressureUnit
 import com.irvingguerra.litedash.feature.tpms.TireReading
@@ -71,18 +70,21 @@ import com.irvingguerra.litedash.feature.tpms.TpmsRepository
 import com.irvingguerra.litedash.feature.tpms.TpmsSource
 import com.irvingguerra.litedash.feature.tpms.TpmsStatus
 import com.irvingguerra.litedash.feature.tpms.Wheel
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
+import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.Locale
-import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /**
- * Ajustes → Llantas, en pestañas: Llantas (de dónde se leen, el auto desde arriba —tocar una la
- * acomoda— y rotar), Presión y avisos, Calibrar (cada llanta contra el manómetro), Inicio y Diagnóstico. Sin fuente (módulo apagado), solo
- * elegirla. Mientras se ve, las llantas se leen aunque nada más las muestre.
+ * Ajustes → Llantas, en pestañas: Sensores (de dónde se leen, el auto desde arriba —tocar una la
+ * acomoda— y rotar), Presión y avisos, Calibrar (cada llanta contra el manómetro), En el inicio y Diagnóstico. Sin fuente
+ * (módulo apagado), solo elegirla. Mientras se ve, las llantas se leen aunque nada más las muestre.
  */
 @Composable
 fun TiresSettings(d: Dependencies) {
@@ -91,30 +93,32 @@ fun TiresSettings(d: Dependencies) {
         val hold = repo.keepAwake()
         onDispose { hold.close() }
     }
-    if (repo.source == null) return SourceCard(repo)
+    if (repo.source == null) return SourceCard(d)
     val motion = remember { TireMotion() }
+    // Rotar sigue aunque se cambie de pestaña (el auto y las tarjetas viven aquí).
+    val scope = rememberCoroutineScope()
     var chosen by remember { mutableStateOf<Wheel?>(null) }
-    when (tabs(listOf(R.string.tires, R.string.tires_pressure, R.string.tires_calibrate, R.string.home, R.string.tires_diagnostics), TIRES_TABS)) {
-        // La fuente y el auto en una sola pestaña: antes el auto salía dos veces (Fuente y Llantas).
+    when (tabs(listOf(R.string.tab_sensors, R.string.tires_pressure, R.string.tires_calibrate, R.string.tires_on_home, R.string.tires_diagnostics), TIRES_TABS)) {
+        // La fuente y el auto en una sola pestaña (el auto sale una vez).
         0 -> {
-            SourceCard(repo)
+            SourceCard(d)
             // Por OBD cada llanta ya viene en su lugar (lo sabe el auto): no hay nada que acomodar.
             val arrange = repo.source != TpmsSource.OBD
             TiresCard(d, chosen, motion) { if (arrange) chosen = if (chosen == it) null else it }
             if (arrange) {
                 chosen?.let { w -> ArrangeCard(repo, w, onClose = { chosen = null }) }
                     ?: Label(stringResource(R.string.tires_tap_hint), Typography.small, LocalColors.current.textMuted)
-                RotateCard(repo, motion)
+                RotateCard(repo, motion, scope)
             }
         }
-        1 -> PressureCard(repo, d.prefs.units.fahrenheit)
+        1 -> PressureCard(d)
         2 -> CalibrateCard(repo)
         3 -> HomeTiresCard(d)
         else -> DiagnosticsCard(repo)
     }
 }
 
-/** Las pestañas de Ajustes → Llantas (Llantas 0, Presión y avisos 1…). */
+/** Las pestañas de Ajustes → Llantas (Sensores 0, Presión y avisos 1…). */
 private const val TIRES_TABS = "tires"
 
 /** La vista desde arriba en su tarjeta. */
@@ -125,11 +129,15 @@ private fun TiresCard(d: Dependencies, selected: Wheel?, motion: TireMotion?, on
     }
 }
 
-/** Fuente: receptor USB, Bluetooth o demostración, con su estado y qué hacer (apagarlo es el switch de Módulos). */
+/**
+ * Fuente: receptor USB, Bluetooth, el auto (OBD) o demostración, con su estado y qué hacer (apagarlo es el switch
+ * de Módulos). Con el auto, «Reintentar» conecta el escáner (aunque se hubiera rendido).
+ */
 @Composable
-private fun SourceCard(repo: TpmsRepository) {
+private fun SourceCard(d: Dependencies) {
     val c = LocalColors.current
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { repo.retry() }
+    val repo = d.tpms
+    val permission = rememberPermissionAsk(bleScanPermission()) { repo.retry() }
     SettingsCard(stringResource(R.string.tires_source)) {
         Segmented(
             listOf(
@@ -142,20 +150,25 @@ private fun SourceCard(repo: TpmsRepository) {
             { repo.source = it },
         )
         val source = repo.source ?: return@SettingsCard Label(stringResource(R.string.tires_source_help), Typography.small, c.textMuted)
-        val problem = problemText(repo)
+        val problem = problemText(d)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             val dot = when {
-                repo.status == TpmsStatus.CONNECTED -> Good
+                repo.status == TpmsStatus.CONNECTED -> c.good
                 problem != null -> c.danger
                 else -> c.textMuted
             }
             Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
             Label(tiresStatusText(repo), Typography.body, maxLines = 1, modifier = Modifier.weight(1f))
             when {
-                repo.status == TpmsStatus.NO_PERMISSION && source == TpmsSource.BLE ->
-                    Button(stringResource(R.string.tires_grant), { permission.launch(repo.blePermission()) }, primary = true)
+                // Negado para siempre, «Permisos» lleva a los ajustes de LiteDash (Android ya no pregunta).
+                repo.status == TpmsStatus.NO_PERMISSION && source == TpmsSource.BLE -> PermissionButtons(permission, stringResource(R.string.tires_grant))
                 repo.status == TpmsStatus.NO_PERMISSION || repo.status == TpmsStatus.NO_DEVICE ->
-                    Button(stringResource(R.string.tires_retry), repo::retry)
+                    Button(stringResource(R.string.retry), {
+                        if (source == TpmsSource.OBD && d.obdAuto) {
+                            obdStoppedByUser = false
+                            d.obd.connect()
+                        } else repo.retry()
+                    })
             }
         }
         problem?.let { Label(it, Typography.small, c.danger) }
@@ -165,19 +178,12 @@ private fun SourceCard(repo: TpmsRepository) {
     }
 }
 
-/** Lo que salió mal, en el idioma de la app (null si nada). */
+/** Lo que salió mal, en el idioma de la app (null si nada). Por el auto, por qué no conecta el escáner. */
 @Composable
-private fun problemText(repo: TpmsRepository): String? {
-    val ble = when (repo.bleIssue) {
-        null -> null
-        // Hasta Android 11 buscar Bluetooth pide la ubicación; desde 12, "dispositivos cercanos".
-        BleProblem.NO_PERMISSION -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) R.string.tires_ble_need_nearby else R.string.tires_ble_need_location
-        BleProblem.BLUETOOTH_OFF -> R.string.tires_ble_off
-        BleProblem.LOCATION_OFF -> R.string.tires_ble_location_off
-        BleProblem.UNSUPPORTED -> R.string.tires_ble_unsupported
-        BleProblem.FAILED -> R.string.tires_ble_failed
-    }
-    val usb = when (repo.error) {
+private fun problemText(d: Dependencies): String? {
+    val repo = d.tpms
+    repo.bleIssue?.let { return stringResource(bleProblemText(it)) }
+    val res = when (repo.error) {
         null -> null
         TpmsError.USB_MISSING -> R.string.tires_error_usb_missing
         TpmsError.USB_DENIED -> R.string.tires_error_usb_denied
@@ -185,10 +191,10 @@ private fun problemText(repo: TpmsRepository): String? {
         TpmsError.USB_UNPLUGGED -> R.string.tires_error_usb_unplugged
         TpmsError.USB_LOST -> R.string.tires_error_usb_lost
         TpmsError.SWAP_UNCONFIRMED -> R.string.tires_error_swap
-        TpmsError.OBD_OFF -> R.string.tires_error_obd_off
+        TpmsError.OBD_OFF -> d.obdIfCreated()?.takeIf { it.state == ObdState.ERROR }?.let { obdErrorText(it.errorKind) } ?: R.string.tires_error_obd_off
         TpmsError.OBD_UNSUPPORTED -> R.string.tires_error_obd_unsupported
     }
-    return (ble ?: usb)?.let { stringResource(it) }
+    return res?.let { stringResource(it) }
 }
 
 /**
@@ -204,7 +210,7 @@ private fun ArrangeCard(repo: TpmsRepository, w: Wheel, onClose: () -> Unit) {
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Label(stringResource(R.string.tires_arrange).uppercase(), Typography.label, c.textMuted, maxLines = 1)
+                    Label(stringResource(R.string.tires_arrange).uppercase(currentLocale()), Typography.label, c.textMuted, maxLines = 1)
                     Label(stringResource(wheelName(w)), Typography.title, maxLines = 1)
                 }
                 IconButton(Icons.close, onClose, size = 44.dp, background = c.surfaceHigh)
@@ -246,7 +252,7 @@ private fun SensorPicker(repo: TpmsRepository, w: Wheel) {
             Button(stringResource(R.string.tires_identify), { confirmed = null; waiting = true; repo.startIdentify() }, primary = true)
         }
     }
-    confirmed?.let { Label(stringResource(R.string.tires_identified, shortId(it)), Typography.body, Good) }
+    confirmed?.let { Label(stringResource(R.string.tires_identified, shortId(it)), Typography.body, c.good) }
     val current = repo.assignment[w]
     val sensors = repo.nearby.sortedWith(compareByDescending<TireReading> { it.sensorId == current }.thenByDescending { it.rssi ?: Int.MIN_VALUE })
     if (sensors.isEmpty()) Label(stringResource(R.string.tires_no_sensors), Typography.small, c.textMuted)
@@ -259,10 +265,10 @@ private fun SensorPicker(repo: TpmsRepository, w: Wheel) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Column(Modifier.weight(1f)) {
-                Label("${shortId(r.sensorId)} · ${r.family}", Typography.body, maxLines = 1)
+                Label(shortId(r.sensorId), Typography.body, maxLines = 1)
                 val info = listOfNotNull(
-                    r.pressureKpa?.let { "${repo.unit.format(it)} ${repo.unit.label}" },
-                    r.rssi?.let { stringResource(R.string.tires_signal, it) },
+                    r.pressureKpa?.let(repo.unit::text),
+                    r.rssi?.let { stringResource(signalText(it)) },
                     at?.let { stringResource(R.string.tires_assigned_to, stringResource(wheelName(it))) },
                 ).joinToString(" · ")
                 Label(info, Typography.small, c.textMuted, maxLines = 1)
@@ -272,6 +278,16 @@ private fun SensorPicker(repo: TpmsRepository, w: Wheel) {
         }
     }
 }
+
+/** Qué tan bien se oye un sensor, en palabras (sin dBm). */
+internal fun signalText(rssi: Int) = when {
+    rssi >= STRONG_DBM -> R.string.tires_signal_strong
+    rssi >= MEDIUM_DBM -> R.string.tires_signal_medium
+    else -> R.string.tires_signal_weak
+}
+
+private const val STRONG_DBM = -70
+private const val MEDIUM_DBM = -85
 
 /** El id corto que se reconoce (los últimos 6). */
 private fun shortId(id: String) = if (id.length > 8) "…" + id.takeLast(6) else id
@@ -299,7 +315,7 @@ private fun UsbPairing(repo: TpmsRepository, w: Wheel) {
             Button(stringResource(R.string.cancel), repo::cancelPair)
         }
         else -> {
-            if (mine && repo.pairing == PairState.DONE) Label(stringResource(R.string.tires_pair_done), Typography.body, Good)
+            if (mine && repo.pairing == PairState.DONE) Label(stringResource(R.string.tires_pair_done), Typography.body, c.good)
             if (mine && repo.pairing == PairState.TIMEOUT) Label(stringResource(R.string.tires_pair_timeout), Typography.body, c.danger)
             Button(stringResource(R.string.tires_pair), { repo.pairUsb(w) }, primary = true)
         }
@@ -316,10 +332,9 @@ private enum class Rotation(val title: Int, val pairs: List<Pair<Wheel, Wheel>>)
 }
 
 @Composable
-private fun RotateCard(repo: TpmsRepository, motion: TireMotion) {
+private fun RotateCard(repo: TpmsRepository, motion: TireMotion, scope: CoroutineScope) {
     val c = LocalColors.current
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
+    val busy = motion.busy
     SettingsCard(stringResource(R.string.tires_rotate), stringResource(R.string.tires_rotate_help)) {
         Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             for (r in Rotation.entries) {
@@ -331,11 +346,8 @@ private fun RotateCard(repo: TpmsRepository, motion: TireMotion) {
                         .clip(shape)
                         .background(c.surfaceHigh)
                         .clickable(enabled = !busy) {
-                            busy = true
-                            scope.launch {
-                                rotate(repo, motion, r.pairs)
-                                busy = false
-                            }
+                            motion.busy = true
+                            scope.launch { rotate(repo, motion, r.pairs) }
                         }
                         .padding(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -352,19 +364,31 @@ private fun RotateCard(repo: TpmsRepository, motion: TireMotion) {
 /**
  * Mueve las tarjetas (≈400 ms) y luego cambia los sensores de lugar, uno por uno (por USB se
  * espera la confirmación del receptor entre cambios). Al final todo vuelve a su lugar ya con
- * los datos nuevos.
+ * los datos nuevos. Empezados los cambios se terminan todos (una rotación a medias revolvería los
+ * sensores) y, pase lo que pase, las tarjetas regresan a su lugar.
  */
 private suspend fun rotate(repo: TpmsRepository, motion: TireMotion, pairs: List<Pair<Wheel, Wheel>>) {
-    motion.moves = pairs.flatMap { (a, b) -> listOf(a to b, b to a) }.toMap()
-    motion.progress.snapTo(0f)
-    motion.progress.animateTo(1f, tween(400, easing = FastOutSlowInEasing))
-    for ((a, b) in pairs) {
-        repo.swap(a, b)
-        if (repo.source == TpmsSource.USB) withTimeoutOrNull(7_000) { snapshotFlow { repo.swapping }.first { !it } }
+    try {
+        motion.moves = pairs.flatMap { (a, b) -> listOf(a to b, b to a) }.toMap()
+        motion.progress.snapTo(0f)
+        motion.progress.animateTo(1f, tween(400, easing = FastOutSlowInEasing))
+        withContext(NonCancellable) {
+            for ((a, b) in pairs) {
+                repo.swap(a, b)
+                if (repo.source == TpmsSource.USB) withTimeoutOrNull(USB_SWAP_WAIT_MS) { snapshotFlow { repo.swapping }.first { !it } }
+            }
+        }
+    } finally {
+        withContext(NonCancellable) {
+            motion.moves = emptyMap()
+            motion.progress.snapTo(0f)
+            motion.busy = false
+        }
     }
-    motion.moves = emptyMap()
-    motion.progress.snapTo(0f)
 }
+
+/** Lo más que se espera a que el receptor USB confirme un cambio. */
+private const val USB_SWAP_WAIT_MS = 7_000L
 
 /** El dibujito de cada rotación: el auto, sus cuatro llantas y hacia dónde van. */
 @Composable
@@ -408,46 +432,64 @@ private fun DrawScope.arrowLine(color: androidx.compose.ui.graphics.Color, a: Of
     }
 }
 
-/** Presión recomendada, unidad, cuándo avisar y lo demás de las alertas. */
+/** Presión recomendada, unidad, cuándo avisar y los dos avisos juntos (el del inicio depende del otro). */
 @Composable
-private fun PressureCard(repo: TpmsRepository, fahrenheit: Boolean) {
+private fun PressureCard(d: Dependencies) {
+    val repo = d.tpms
+    val fahrenheit = d.prefs.units.fahrenheit
     val unit = repo.unit
+    val locale = currentLocale()
+    // Hasta dónde baja antes de avisar; con delantera y trasera distintas se dicen las dos.
+    fun lowText(kpa: Float) = unit.text(kpa * (100 - repo.lowPercent) / 100f, locale)
+    val lowFront = lowText(repo.recommendedFrontKpa)
+    val lowRear = lowText(repo.recommendedRearKpa)
+    val lowHelp = if (lowFront == lowRear) stringResource(R.string.tires_low_percent_help, lowFront)
+    else stringResource(R.string.tires_low_percent_help_both, lowFront, lowRear)
     SettingsCard(stringResource(R.string.tires_pressure), stringResource(R.string.tires_pressure_help)) {
         Segmented(PressureUnit.entries.map { it to it.label }, unit, { repo.unit = it })
-        Stepper(stringResource(R.string.tires_front), "${unit.format(repo.recommendedFrontKpa)} ${unit.label}",
+        Stepper(stringResource(R.string.tires_front), unit.text(repo.recommendedFrontKpa, locale),
             { repo.recommendedFrontKpa = stepKpa(repo.recommendedFrontKpa, unit, -1, RECOMMENDED_KPA) },
             { repo.recommendedFrontKpa = stepKpa(repo.recommendedFrontKpa, unit, 1, RECOMMENDED_KPA) })
-        Stepper(stringResource(R.string.tires_rear), "${unit.format(repo.recommendedRearKpa)} ${unit.label}",
+        Stepper(stringResource(R.string.tires_rear), unit.text(repo.recommendedRearKpa, locale),
             { repo.recommendedRearKpa = stepKpa(repo.recommendedRearKpa, unit, -1, RECOMMENDED_KPA) },
             { repo.recommendedRearKpa = stepKpa(repo.recommendedRearKpa, unit, 1, RECOMMENDED_KPA) })
-        Stepper(stringResource(R.string.tires_low_percent), "${repo.lowPercent} %",
+        Stepper(stringResource(R.string.tires_low_percent), stringResource(R.string.value_with_unit, String.format(locale, "%d", repo.lowPercent), stringResource(R.string.unit_percent)),
             { repo.lowPercent = (repo.lowPercent - 5).coerceIn(10, 30) },
             { repo.lowPercent = (repo.lowPercent + 5).coerceIn(10, 30) },
-            help = stringResource(R.string.tires_low_percent_help, unit.format(repo.recommendedFrontKpa * (100 - repo.lowPercent) / 100f) + " " + unit.label))
+            help = lowHelp)
         Stepper(stringResource(R.string.tires_high_temp), tempText(repo.highTempC, fahrenheit),
             { repo.highTempC = (repo.highTempC - 5f).coerceIn(50f, 100f) },
             { repo.highTempC = (repo.highTempC + 5f).coerceIn(50f, 100f) })
         SwitchRow(stringResource(R.string.tires_show_spare), repo.showSpare, { repo.showSpare = it })
         SwitchRow(stringResource(R.string.tires_alerts), repo.alertsEnabled, { repo.alertsEnabled = it }, stringResource(R.string.tires_alerts_help))
+        // Sin avisos no hay aviso en el inicio: el interruptor se cambia por la nota.
+        if (repo.alertsEnabled) SwitchRow(stringResource(R.string.tires_banner), d.prefs.tiresBanner, { d.prefs.tiresBanner = it })
+        else Label(stringResource(R.string.tires_alerts_off_note), Typography.small, LocalColors.current.warning)
     }
 }
 
 /**
  * El ajuste de cada llanta, con lo que marca ahora (ya ajustado): se mide con el manómetro y se
- * sube o baja hasta que coincida. Cada sensor puede venir corrido distinto.
+ * sube o baja hasta que coincida. Cada sensor puede venir corrido distinto y su ajuste va con él;
+ * una llanta sin sensor no se puede ajustar.
  */
 @Composable
 private fun CalibrateCard(repo: TpmsRepository) {
     val unit = repo.unit
+    val locale = currentLocale()
     val wheels = if (repo.showSpare) Wheel.entries else Wheel.ROAD
     SettingsCard(stringResource(R.string.tires_offset), stringResource(R.string.tires_offset_help)) {
+        // Varios sensores Bluetooth dan presión absoluta y restan la del mar: en lugares altos marcan de menos.
+        if (repo.source == TpmsSource.BLE) Label(stringResource(R.string.tires_offset_altitude), Typography.small, LocalColors.current.textMuted)
         for (w in wheels) {
             val kpa = repo.wheelReading(w)?.takeUnless { it.lost }?.pressureKpa
             val offset = repo.offsetKpa(w)
-            Stepper(stringResource(wheelName(w)), offsetText(offset, unit),
+            val hasSensor = repo.assignment[w] != null
+            Stepper(stringResource(wheelName(w)), if (hasSensor) offsetText(offset, unit, locale) else "—",
                 { repo.setOffsetKpa(w, stepKpa(offset, unit, -1, OFFSET_KPA)) },
                 { repo.setOffsetKpa(w, stepKpa(offset, unit, 1, OFFSET_KPA)) },
-                help = kpa?.let { stringResource(R.string.tires_reads, "${unit.format(it)} ${unit.label}") } ?: stringResource(R.string.tire_none))
+                help = kpa?.let { stringResource(R.string.tires_reads, unit.text(it, locale)) } ?: stringResource(R.string.tire_none),
+                enabled = hasSensor)
         }
     }
 }
@@ -463,41 +505,49 @@ private fun PressureUnit.step() = when (this) {
 }
 
 /** Sube o baja un paso redondeando a la unidad que se ve (sin arrastrar decimales de kPa ni un "−0"). */
-private fun stepKpa(kpa: Float, unit: PressureUnit, dir: Int, range: ClosedFloatingPointRange<Float>): Float {
+internal fun stepKpa(kpa: Float, unit: PressureUnit, dir: Int, range: ClosedFloatingPointRange<Float>): Float {
     val step = unit.step()
     val shown = (unit.fromKpa(kpa) / step).roundToInt() + dir
     return unit.toKpa(shown * step).coerceIn(range).let { if (abs(it) < 0.01f) 0f else it }
 }
 
-private fun offsetText(kpa: Float, unit: PressureUnit): String {
-    val v = unit.fromKpa(kpa)
-    val text = if (unit == PressureUnit.BAR) "%.1f".format(Locale.US, abs(v)) else abs(v).roundToInt().toString()
-    val sign = if (v > 0.001f) "+" else if (v < -0.001f) "−" else ""
-    return "$sign$text ${unit.label}"
+/** El ajuste con su signo ("+2 psi", "−0.1 bar"; sin signo si es cero a la vista). */
+internal fun offsetText(kpa: Float, unit: PressureUnit, locale: Locale = Locale.US): String {
+    val text = unit.text(abs(kpa), locale)
+    val shown = unit.format(abs(kpa)).any { it in '1'..'9' }
+    val sign = if (!shown) "" else if (kpa > 0) "+" else "−"
+    return sign + text
 }
 
 /** Un valor con − y + a la derecha. */
 @Composable
-private fun Stepper(title: String, value: String, onMinus: () -> Unit, onPlus: () -> Unit, help: String? = null) {
+private fun Stepper(title: String, value: String, onMinus: () -> Unit, onPlus: () -> Unit, help: String? = null, enabled: Boolean = true) {
     val c = LocalColors.current
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(Modifier.weight(1f)) {
             Label(title, Typography.body)
             if (help != null) Label(help, Typography.small, c.textMuted)
         }
-        IconButton(Icons.minus, onMinus, size = 44.dp, background = c.surfaceHigh)
+        // Deshabilitado: los botones se ven apagados y no hacen nada.
+        val buttons = if (enabled) Modifier else Modifier.alpha(DISABLED_ALPHA)
+        IconButton(Icons.minus, if (enabled) onMinus else ({}), buttons, size = 44.dp, background = c.surfaceHigh)
         Label(value, Typography.subtitle.copy(textAlign = TextAlign.Center), maxLines = 1, modifier = Modifier.width(92.dp))
-        IconButton(Icons.plus, onPlus, size = 44.dp, background = c.surfaceHigh)
+        IconButton(Icons.plus, if (enabled) onPlus else ({}), buttons, size = 44.dp, background = c.surfaceHigh)
     }
 }
 
-/** Qué se ve en el inicio: pastillas sobre el auto, aviso y testigo. */
+private const val DISABLED_ALPHA = 0.35f
+
+/** Qué se ve en el inicio: pastillas sobre el auto, qué hace tocarlo y el widget (el aviso va en Presión y avisos). */
 @Composable
 private fun HomeTiresCard(d: Dependencies) {
     val c = LocalColors.current
     SettingsCard(stringResource(R.string.tires_on_home), stringResource(R.string.tires_tile_hint)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Label(stringResource(R.string.tires_on_car), Typography.body, modifier = Modifier.weight(1f))
+            Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                Label(stringResource(R.string.tires_on_car), Typography.body)
+                Label(stringResource(R.string.tires_on_car_help), Typography.small, c.textMuted)
+            }
             Segmented(
                 listOf(
                     TiresOnCar.WHEELS to stringResource(R.string.tires_on_car_wheels),
@@ -508,10 +558,11 @@ private fun HomeTiresCard(d: Dependencies) {
                 { on ->
                     d.prefs.tiresOnCar = on
                     // Aquí se decide para todos: la carretera y el auto 3D dejan su propio ajuste.
-                    d.dashboard.changeData(
-                        d.dashboard.tiles.filter { (it.type == TileTypes.ROAD || it.type == TileTypes.CAR) && TileTires.parse(it.data) != null }
-                            .associate { it.id to if (it.type == TileTypes.ROAD) RoadLook.parse(it.data).copy(tires = null).encode() else "" },
-                    )
+                    d.dashboard.changeDataEverywhere {
+                        if ((it.type == TileTypes.ROAD || it.type == TileTypes.CAR) && TileTires.parse(it.data) != null) {
+                            if (it.type == TileTypes.ROAD) RoadLook.parse(it.data).copy(tires = null).encode() else ""
+                        } else null
+                    }
                 },
             )
         }
@@ -529,16 +580,14 @@ private fun HomeTiresCard(d: Dependencies) {
                 { d.prefs.carTap = it },
             )
         }
-        SwitchRow(stringResource(R.string.tires_banner), d.prefs.tiresBanner, { d.prefs.tiresBanner = it })
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).padding(end = 16.dp)) {
                 Label(stringResource(R.string.tires_tile), Typography.body)
                 Label(stringResource(R.string.tile_tires_help), Typography.small, c.textMuted)
             }
-            if (d.dashboard.tiles.any { it.type == TileTypes.TIRES }) Label(stringResource(R.string.on_your_home), Typography.small, c.accent)
+            if (d.dashboard.allTiles.any { it.type == TileTypes.TIRES }) Label(stringResource(R.string.on_your_home), Typography.small, c.accent)
             else Button(stringResource(R.string.add), { d.dashboard.addTile(TileTypes.TIRES) })
         }
-        if (!d.tpms.alertsEnabled) Label(stringResource(R.string.tires_alerts_off_note), Typography.small, c.warning)
     }
 }
 

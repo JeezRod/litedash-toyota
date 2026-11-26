@@ -29,6 +29,7 @@ object Icons {
     /** Foto: marco con una montaña y el sol. */
     val image = icon("M5 5h14a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-14a1 1 0 0 1 -1 -1v-12a1 1 0 0 1 1 -1z M4 16l5 -5l4 4l2 -2l5 5 M14.5 9a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0 -3 0")
     val apps = icon("M4 4h6v6h-6z M14 4h6v6h-6z M4 14h6v6h-6z M14 14h6v6h-6z")
+    val home = icon("M4 11.5l8 -7.5l8 7.5 M6 10v10h4.5v-6h3v6h4.5v-10")
     val settings = icon("M4 6h8 M16 6h4 M14 4v4 M4 12h2 M10 12h10 M8 10v4 M4 18h11 M19 18h1 M17 16v4")
     val minus = icon("M6 12h12")
     /** Tarjeta tachada: quitar o poner el fondo de una pieza. */
@@ -59,7 +60,8 @@ object Icons {
     val snow = icon("M7 15h10a4 4 0 0 0 0 -8a6 6 0 0 0 -11.5 1.5a3.3 3.3 0 0 0 1.5 6.5z M8 19h.01 M12 20h.01 M16 19h.01 M10 22h.01 M14 22h.01")
     val fog = icon("M4 9h16 M3 13h18 M5 17h14 M8 21h8")
     val bell = icon("M6 16v-5a6 6 0 0 1 12 0v5l2 2h-16z M10 21h4")
-    val phoneCar = icon("M8 3h8a1 1 0 0 1 1 1v9a1 1 0 0 1 -1 1h-8a1 1 0 0 1 -1 -1v-9a1 1 0 0 1 1 -1z M11 11h2 M4 21l1.5 -4h13l1.5 4 M6 21h.01 M18 21h.01")
+    /** Celular conectado (Android Auto / CarPlay): sin logos ajenos. */
+    val phoneCar = icon("M6 3h6a1.5 1.5 0 0 1 1.5 1.5v15a1.5 1.5 0 0 1 -1.5 1.5h-6a1.5 1.5 0 0 1 -1.5 -1.5v-15a1.5 1.5 0 0 1 1.5 -1.5z M8 18h2 M16.5 9.5a3.5 3.5 0 0 1 0 5 M19 7a7 7 0 0 1 0 10")
     // Motor (como la luz de "check engine"): el Taller del escáner OBD.
     val engine = icon("M3 10v6 M3 13h2 M5 9h2l1 -2h5l1 2h3l2 2h2v6h-2l-2 2h-8l-2 -3h-2z M9 4h4 M11 4v3")
     val speed = icon("M4.5 17a8.5 8.5 0 1 1 15 0 M12 14l3.5 -4.5 M12 14h.01")

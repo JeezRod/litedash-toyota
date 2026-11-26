@@ -6,6 +6,28 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OfflineMapsTest {
+    @Test
+    fun aMissingOrEmptyListIsTrustedButADamagedOneIsNot() {
+        val f = java.io.File.createTempFile("areas", ".json")
+        try {
+            f.delete()
+            // Nunca guardó una zona: lista cierta y vacía (se puede barrer lo de una zona cancelada).
+            assertEquals(emptyList<OfflineArea>(), readAreaList(f))
+            // Borró todas sus zonas: igual.
+            f.writeText("[]")
+            assertEquals(emptyList<OfflineArea>(), readAreaList(f))
+            f.writeText("""[{"id":"a","lat":19.4,"lon":-99.1,"km":10,"tiles":5,"bytes":9,"savedAt":1}]""")
+            assertEquals("a", readAreaList(f)!!.single().id)
+            // Un apagón al guardarla (0 bytes o cortada): no se toca nada.
+            f.writeText("")
+            assertEquals(null, readAreaList(f))
+            f.writeText("""[{"id":"a","lat"""")
+            assertEquals(null, readAreaList(f))
+        } finally {
+            f.delete()
+        }
+    }
+
     private val zocaloLat = 19.4326
     private val zocaloLon = -99.1332
 
@@ -73,6 +95,15 @@ class OfflineMapsTest {
         val a = area("a", zocaloLat, zocaloLon, 10)
         assertTrue(a.contains(zocaloLat + 0.05, zocaloLon))   // ~5.6 km
         assertFalse(a.contains(zocaloLat + 0.1, zocaloLon))   // ~11 km
+        // En la orilla (9.8 km) la tesela de debajo puede no haberse bajado: ya no cuenta como adentro.
+        assertFalse(a.contains(zocaloLat + 0.088, zocaloLon))
+        // Todo lo que cuenta como adentro tiene su tesela del 14 en la zona.
+        val keys = areaTiles(a.lat, a.lon, a.km).toSet()
+        for (i in 0..40) for (j in 0..40) {
+            val lat = zocaloLat - 0.1 + i * 0.005
+            val lon = zocaloLon - 0.1 + j * 0.005
+            if (a.contains(lat, lon)) assertTrue("$lat,$lon", tileKey(14, tileX(lon, 14).toInt(), tileY(lat, 14).toInt()) in keys)
+        }
         assertEquals(111.2, distanceKm(0.0, 0.0, 1.0, 0.0), 0.1)
     }
 
@@ -83,4 +114,15 @@ class OfflineMapsTest {
     }
 
     private fun area(id: String, lat: Double, lon: Double, km: Int) = OfflineArea(id, lat, lon, km, 0, 0L, 0L)
+
+    @Test
+    fun radiiStayWithinOpenFreeMapLimits() {
+        // Cerca del ecuador (CDMX) caben los radios que se ofrecen (10, 20, 30 km); 50 km ya no.
+        for (km in listOf(10, 20, 30)) assertTrue("$km km", OfflineMaps.withinLimits(areaTiles(zocaloLat, zocaloLon, km).size))
+        assertFalse(OfflineMaps.withinLimits(areaTiles(zocaloLat, zocaloLon, 50).size))
+        // Más al norte las teselas son más chicas: 30 km en Edimburgo pasa del tope y 20 km cabe.
+        assertFalse(OfflineMaps.withinLimits(areaTiles(55.95, -3.19, 30).size))
+        assertTrue(OfflineMaps.withinLimits(areaTiles(55.95, -3.19, 20).size))
+        assertFalse(OfflineMaps.withinLimits(OfflineMaps.MAX_TILES + 1))
+    }
 }

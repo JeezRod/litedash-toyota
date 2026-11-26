@@ -21,6 +21,7 @@ import com.irvingguerra.litedash.feature.music.MusicExpanded
 import com.irvingguerra.litedash.feature.music.RadioExpanded
 import com.irvingguerra.litedash.feature.player.PlayerBrowser
 import com.irvingguerra.litedash.feature.player.PlayerSource
+import com.irvingguerra.litedash.feature.player.R as PlayerR
 
 /** Qué se ve en la pantalla Música: lo que suena (con la biblioteca de Archivos) o la radio. */
 enum class MediaTab { MUSIC, RADIO }
@@ -41,6 +42,8 @@ fun MediaScreen(
     modifier: Modifier = Modifier,
     /** Abrir Música ya en la biblioteca de Archivos (se llegó por play sin nada que sonar). */
     browse: Boolean = false,
+    /** La pastilla de la guía, entre las pestañas y cerrar (null = nada). */
+    guide: (@Composable () -> Unit)? = null,
 ) {
     Column(modifier) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -48,7 +51,7 @@ fun MediaScreen(
                 listOf(MediaTab.MUSIC to stringResource(R.string.tile_music), MediaTab.RADIO to stringResource(R.string.tile_radio)),
                 tab, onTab,
             )
-            Spacer(Modifier.weight(1f))
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { guide?.invoke() }
             IconButton(Icons.close, close, size = 48.dp, background = LocalColors.current.surfaceHigh)
         }
         Spacer(Modifier.height(10.dp))
@@ -57,7 +60,13 @@ fun MediaScreen(
                 MediaTab.MUSIC -> MusicExpanded(d.music, startBrowsing = browse, browser = { picked -> PlayerBrowser(PlayerSource.USB, picked, Modifier.fillMaxSize()) })
                 MediaTab.RADIO -> RadioExpanded(
                     d.music, onSettings = onRadioSettings,
-                    browser = if (d.music.radioInternet) { picked -> PlayerBrowser(PlayerSource.RADIO, picked, Modifier.fillMaxSize()) } else null,
+                    browser = if (d.music.radioInternet) { picked ->
+                        // La distancia a cada estación en la unidad elegida (Inicio y apariencia → Unidades).
+                        val miles = d.prefs.units.miles
+                        PlayerBrowser(PlayerSource.RADIO, picked, Modifier.fillMaxSize(), distance = { km ->
+                            if (miles) stringResource(R.string.radio_mi, (km / KM_PER_MILE).toInt()) else stringResource(PlayerR.string.radio_km, km.toInt())
+                        })
+                    } else null,
                 )
             }
         }

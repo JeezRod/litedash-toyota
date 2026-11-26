@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="road_speed">速度</string>
+    <string name="road_speed_text">数字のみ</string>
+    <string name="road_speed_gauge">スピードメーター</string>
+    <string name="road_speed_show">速度を表示</string>
+    <string name="trip_time">時間</string>
+    <string name="trip_average">平均</string>
+    <string name="road_trip_distance">距離</string>
+    <string name="trip_heading">方位</string>
+    <string-array name="compass_points">
+        <item>北</item>
+        <item>北東</item>
+        <item>東</item>
+        <item>南東</item>
+        <item>南</item>
+        <item>南西</item>
+        <item>西</item>
+        <item>北西</item>
+    </string-array>
+    <!-- A number with its unit ("12.3 km") and two pieces on one line ("Insurance · in 3 days") -->
+    <string name="value_with_unit">%1$s %2$s</string>
+    <string name="two_parts">%1$s · %2$s</string>
+    <string name="weather_degrees">%1$d°</string>
+    <string name="weather_range">%1$d° / %2$d°</string>
+    <string name="page_n">ページ %1$d</string>
+    <string name="page_add">ページを追加</string>
+    <string name="page_remove">ページを削除</string>
+    <string name="page_remove_question">ページ %1$d を削除しますか？</string>
+    <string name="page_remove_message">このページのウィジェットはなくなります。最初のページとほかのページは残ります。</string>
+    <string name="page_background_title">ページ %1$d の背景</string>
+    <string name="page_background_image">画像</string>
+    <string name="page_background_map">地図</string>
+    <string name="map_backdrop_help">地図はウィジェットの後ろであなたを追いかけ、空いている場所にあなたを表示します。スタイルは「設定 → アプリ → ナビ」のものです。インターネットがないときはオフラインエリアを使います。</string>
+    <string name="map_backdrop_has_widget">このページには地図ウィジェットがあります。背景に地図を使うと地図が2つ表示されます。</string>
+    <string name="map_backdrop_remove_widget">地図ウィジェットを外す</string>
+</resources>

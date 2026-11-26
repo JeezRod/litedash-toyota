@@ -6,7 +6,9 @@
     <string name="player_next">Siguiente</string>
     <string name="player_previous">Anterior</string>
     <string name="player_cannot_play">No se pudo reproducir. Prueba otra estación o revisa la conexión.</string>
+    <string name="player_cannot_open_track">No se pudo abrir esta canción.</string>
     <string name="player_timeout">La estación no responde. Prueba otra.</string>
+    <string name="player_no_focus">Otra app tiene el audio. Toca play otra vez.</string>
     <string name="library_no_drive">Conecta una memoria USB con música</string>
     <string name="library_no_permission">LiteDash necesita permiso para leer la música de la memoria</string>
     <string name="library_grant">Dar permiso</string>
@@ -20,8 +22,8 @@
         <item quantity="one">%1$d canción</item>
         <item quantity="other">%1$d canciones</item>
     </plurals>
-    <string name="library_shuffle">Aleatorio</string>
     <string name="library_unknown">Sin nombre</string>
+    <string name="library_capped">Se muestran %1$s canciones</string>
     <string name="library_root">Raíz de la memoria</string>
     <string name="radio_nearby">Cerca de ti</string>
     <string name="radio_favorites">Favoritas</string>
@@ -30,7 +32,7 @@
     <string name="radio_search_help">Escribe el nombre de una estación</string>
     <string name="radio_loading">Buscando estaciones…</string>
     <string name="radio_none">No se encontraron estaciones. Revisa la conexión a internet.</string>
-    <string name="radio_no_location">Sin ubicación: estas son las más escuchadas de tu país. Activa la ubicación en Módulos para ver las de tu zona.</string>
+    <string name="radio_no_location">Sin ubicación: estas son las más escuchadas de tu país. Para ver las de tu zona, da el permiso de ubicación en Módulos → Permisos.</string>
     <string name="radio_no_favorites">Toca la estrella de una estación para tenerla aquí.</string>
     <string name="radio_km">%1$d km</string>
     <string name="library_pick_folder">Elegir carpeta</string>

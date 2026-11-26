@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -30,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -38,6 +41,9 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -55,6 +61,7 @@ object Brand {
 
 /** Colores que se repiten entre los temas: tinta (fondo oscuro), tinta y papel del claro, y su ámbar. */
 private val Ink = Color(0xFF0E1013)
+private val Good = Color(0xFF3FB27F)
 private val LightInk = Color(0xFF16181C)
 private val LightPaper = Color(0xFFE9ECF0)
 private val LightAmber = Color(0xFFE59500)
@@ -73,6 +80,8 @@ data class Colors(
     val danger: Color,
     /** Advertencia (Salud, Llantas, códigos pendientes): siempre ámbar, aunque se elija otro color. */
     val warning: Color,
+    /** Todo bien (Salud, Llantas, conectado): siempre verde, aunque se elija otro color. */
+    val good: Color,
     /** Relleno de lo principal (botón principal, play, barra de avance, chip elegido) y el texto encima. */
     val primary: Color,
     val onPrimary: Color,
@@ -84,7 +93,7 @@ data class Colors(
  * Un color que no se vería se ajusta: en oscuro, uno casi negro se aclara; en claro, uno claro se
  * oscurece. Lo de encima ([Colors.onPrimary]) es tinta o blanco, el que más contraste.
  */
-fun Colors.withAccent(chosen: Color?): Colors {
+internal fun Colors.withAccent(chosen: Color?): Colors {
     if (chosen == null) return this
     var color: Color = chosen
     if (dark) while (color.luminance() < 0.12f) color = lerp(color, Color.White, 0.1f)
@@ -94,10 +103,55 @@ fun Colors.withAccent(chosen: Color?): Colors {
     return copy(accent = color, primary = color, onPrimary = if (contrast(color, Ink) >= contrast(color, Color.White)) Ink else Color.White)
 }
 
+/**
+ * Los colores con las tarjetas del color que eligió el usuario; null = las del tema. Él elige el tono y el tema
+ * decide qué tan claro va: en oscuro se baja hasta [DARK_CARD_MAX] (un azul vivo queda azul profundo) y en claro se
+ * sube hasta [LIGHT_CARD_MIN] (queda pastel), así el texto del tema siempre se lee. De ese color salen lo elevado,
+ * las rayas y el fondo; el texto apagado y el realce se ajustan si no contrastan.
+ */
+internal fun Colors.withCards(chosen: Color?): Colors {
+    if (chosen == null) return this
+    val card = cardTone(chosen, dark)
+    val high = lerp(card, text, if (dark) 0.09f else 0.06f)
+    var muted = textMuted
+    while (contrast(muted, card) < MUTED_CONTRAST && muted != text) muted = lerp(muted, text, 0.15f).takeIf { it != muted } ?: text
+    var mark = accent
+    val toward = if (dark) Color.White else Color.Black
+    while (contrast(mark, card) < MARK_CONTRAST && mark != toward) mark = lerp(mark, toward, 0.12f).takeIf { it != mark } ?: toward
+    val main = if (primary == accent) mark else primary
+    return copy(
+        background = lerp(card, Color.Black, if (dark) 0.5f else 0.07f),
+        surface = card,
+        surfaceHigh = high,
+        line = lerp(card, text, 0.12f),
+        textMuted = muted,
+        accent = mark,
+        primary = main,
+        onPrimary = if (contrast(main, Ink) >= contrast(main, Color.White)) Ink else Color.White,
+    )
+}
+
+/** El color [chosen] con la claridad que le toca a una tarjeta del tema oscuro ([dark]) o del claro. */
+fun cardTone(chosen: Color, dark: Boolean): Color {
+    var color = chosen.copy(alpha = 1f)
+    if (dark) while (color.luminance() > DARK_CARD_MAX) color = lerp(color, Color.Black, 0.08f)
+    else while (color.luminance() < LIGHT_CARD_MIN) color = lerp(color, Color.White, 0.1f)
+    return color
+}
+
+/** Lo más clara que va una tarjeta en oscuro y lo más oscura en claro (luminancia 0–1). */
+private const val DARK_CARD_MAX = 0.075f
+private const val LIGHT_CARD_MIN = 0.78f
+
+/** El contraste mínimo del texto apagado y del realce contra la tarjeta. */
+private const val MUTED_CONTRAST = 3f
+private const val MARK_CONTRAST = 3f
+
 /** El contraste entre dos colores (1–21), como lo mide WCAG. */
-private fun contrast(a: Color, b: Color): Float {
-    val (hi, lo) = listOf(a.luminance(), b.luminance()).sortedDescending()
-    return (hi + 0.05f) / (lo + 0.05f)
+internal fun contrast(a: Color, b: Color): Float {
+    val la = a.luminance()
+    val lb = b.luminance()
+    return (maxOf(la, lb) + 0.05f) / (minOf(la, lb) + 0.05f)
 }
 
 // Estilo limpio (Irving, 2026-11-01: "más estilo Apple o DuduAuto"): tarjetas lisas sin
@@ -113,6 +167,7 @@ val DarkColors = Colors(
     accent = Brand.Amber,
     danger = Color(0xFFFF6B5E),
     warning = Brand.Amber,
+    good = Good,
     primary = Brand.LightWhite,
     onPrimary = Ink,
 )
@@ -124,23 +179,35 @@ val LightColors = Colors(
     surfaceHigh = Color(0xFFF0F2F5),
     line = Color(0xFFE3E6EA),
     text = LightInk,
-    textMuted = Color(0xFF7D8590),
+    // ≥ 4.5 sobre el fondo, lo elevado y la tarjeta (el #7D8590 de antes daba 3.1 sobre el fondo).
+    textMuted = Color(0xFF626A75),
     accent = LightAmber,
     danger = Color(0xFFD93A2B),
     warning = LightAmber,
+    good = Good,
     primary = LightInk,
     onPrimary = LightPaper,
 )
 
 val LocalColors = staticCompositionLocalOf { DarkColors }
 
-/** Esquinas: moderadas (Irving pidió menos redondeado que la propuesta). */
+/** Los colores de un tema ([dark]) con el realce y las tarjetas elegidos (null = los suyos): los de [LiteDashTheme]. */
+fun themeColors(dark: Boolean, accent: Color?, cards: Color?): Colors =
+    (if (dark) DarkColors else LightColors).withAccent(accent).withCards(cards)
+
+/**
+ * Un bloque que resalta dentro de una tarjeta (la opción elegida, un campo, una ficha): liso en una tarjeta lisa y,
+ * dentro del vidrio (ahí [Colors.surfaceHigh] ya es translúcido, ver [contentColors]), translúcido como lo demás.
+ */
+val Colors.raised: Color get() = if (surfaceHigh.alpha < 1f) surfaceHigh else surface
+
 /**
  * El margen de adentro de las tarjetas del inicio (los widgets): poco, para que lo de adentro
  * luzca y se lea de lejos. Todas lo usan igual, con fondo o sin él.
  */
 val TilePadding = 10.dp
 
+/** Esquinas: moderadas (Irving pidió menos redondeado que la propuesta). */
 object Radius {
     /** Tarjetas del tablero y de Ajustes. */
     val card = 14.dp
@@ -152,12 +219,13 @@ object Radius {
 
 /**
  * Sin Material: la app usa solo foundation para mantenerse ligera.
- * [scale] agranda o achica toda la interfaz (pantallas que mienten con su dpi); [accent], el color elegido.
+ * [scale] agranda o achica toda la interfaz (pantallas que mienten con su dpi); [accent], el color elegido de la
+ * interfaz y [cards], el de las tarjetas.
  */
 @Composable
-fun LiteDashTheme(dark: Boolean = true, scale: Float = 1f, accent: Color? = null, content: @Composable () -> Unit) {
+fun LiteDashTheme(dark: Boolean = true, scale: Float = 1f, accent: Color? = null, cards: Color? = null, content: @Composable () -> Unit) {
     val d = LocalDensity.current
-    val colors = remember(dark, accent) { (if (dark) DarkColors else LightColors).withAccent(accent) }
+    val colors = remember(dark, accent, cards) { themeColors(dark, accent, cards) }
     CompositionLocalProvider(
         LocalColors provides colors,
         LocalDensity provides Density(d.density * scale, d.fontScale),
@@ -190,7 +258,10 @@ fun Label(
 /** La pieza del tablero va sin fondo de tarjeta: [Card] queda transparente (lo de adentro se ve igual). */
 val LocalPlainCard = compositionLocalOf { false }
 
-/** Tarjeta base del tablero: superficie lisa, sin borde, con esquinas [Radius.card]. */
+/**
+ * Tarjeta base de toda la app, con esquinas [Radius.card]: lisa o de vidrio según la piel ([LocalCardLook]) y del
+ * color del tema. Sin tarjeta ([LocalPlainCard]), transparente. Lo de adentro recibe sus colores ([contentColors]).
+ */
 @Composable
 fun Card(
     modifier: Modifier = Modifier,
@@ -198,13 +269,20 @@ fun Card(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val c = LocalColors.current
+    val look = LocalCardLook.current
+    val plain = LocalPlainCard.current
     val shape = RoundedCornerShape(Radius.card)
-    var m = modifier.clip(shape).background(if (LocalPlainCard.current) Color.Transparent else c.surface)
+    val context = LocalContext.current
+    val cheap = remember { lowMemoryDevice(context) }
+    var m = modifier.then(if (plain) Modifier else Modifier.glassShadow(look, c.dark, Radius.card, cheap))
+        .clip(shape).then(if (plain) Modifier else Modifier.skinSurface(look, c, shape))
     if (onClick != null) m = m.clickable(onClick = onClick)
-    Box(m, content = content)
+    // Una vez por tema y piel, no en cada dibujo (un valor nuevo haría releer los colores a todo lo de adentro).
+    val inner = remember(c, look.style, plain) { contentColors(c, look, plain) }
+    Box(m) { CompositionLocalProvider(LocalColors provides inner) { content() } }
 }
 
-/** Botón redondo con ícono, objetivo táctil de 56 dp como pide el plan. */
+/** Botón redondo con ícono, objetivo táctil de 56 dp como pide el plan; [label] = lo que dice el lector de pantalla. */
 @Composable
 fun IconButton(
     icon: ImageVector,
@@ -213,9 +291,11 @@ fun IconButton(
     size: Dp = 56.dp,
     background: Color = Color.Transparent,
     color: Color = LocalColors.current.text,
+    label: String? = null,
 ) {
     Box(
-        modifier.size(size).clip(CircleShape).background(background).clickable(onClick = onClick),
+        modifier.size(size).clip(CircleShape).background(background).clickable(role = Role.Button, onClick = onClick)
+            .then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier),
         contentAlignment = Alignment.Center,
     ) { Icon(icon, color, size * 0.45f) }
 }
@@ -244,16 +324,18 @@ fun Button(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, pri
 @Composable
 fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier, check: Boolean = false) {
     val c = LocalColors.current
-    Row(
+    // Si no caben (pantalla de pie), las que sobran bajan de renglón en vez de cortarse; si caben, una fila.
+    FlowRow(
         modifier.clip(RoundedCornerShape(Radius.inner)).background(c.surfaceHigh).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         for ((value, text) in options) {
             val on = value == selected
             Box(
                 Modifier
                     .clip(RoundedCornerShape(Radius.inner - 2.dp))
-                    .background(if (on) c.surface else Color.Transparent)
+                    .background(if (on) c.raised else Color.Transparent)
                     .clickable { onSelect(value) }
                     .padding(horizontal = 18.dp, vertical = 11.dp),
                 contentAlignment = Alignment.Center,
@@ -265,6 +347,15 @@ fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> 
             }
         }
     }
+}
+
+/** Atrapa los toques para que no pasen a lo de abajo (paneles y capas sobre el inicio); no se ve ni hace nada. */
+fun Modifier.blockTouches(): Modifier = clickable(interactionSource = null, indication = null, onClick = {})
+
+/** Una raya fina que separa renglones dentro de una tarjeta. */
+@Composable
+fun Divider(modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().height(1.dp).background(LocalColors.current.line))
 }
 
 /** Un renglón con su interruptor: el texto (y una ayuda opcional) a la izquierda. */
@@ -295,17 +386,31 @@ fun Switch(checked: Boolean, modifier: Modifier = Modifier) {
     }
 }
 
-/** Campo de texto de una línea con [hint]; [icon] pone la lupa (buscadores). */
+/**
+ * Campo de texto de una línea con [hint]; [icon] pone la lupa (buscadores). [compact] = píldora baja para la cabecera
+ * de un panel (#28: así la lista de abajo gana un renglón). [onDone] = qué hace «Listo» del teclado (si no, lo de Android:
+ * soltar el foco, que en Android ≤ 8 regresa al primer campo y vuelve a abrir el teclado).
+ */
 @Composable
-fun TextInput(value: String, onChange: (String) -> Unit, hint: String, modifier: Modifier = Modifier, icon: Boolean = false) {
+fun TextInput(
+    value: String,
+    onChange: (String) -> Unit,
+    hint: String,
+    modifier: Modifier = Modifier,
+    icon: Boolean = false,
+    compact: Boolean = false,
+    onDone: (() -> Unit)? = null,
+) {
     val c = LocalColors.current
+    val shape = if (compact) CircleShape else RoundedCornerShape(Radius.card)
     Row(
-        modifier.height(56.dp).clip(RoundedCornerShape(Radius.card)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(Radius.card)).padding(horizontal = 20.dp),
+        modifier.height(if (compact) 44.dp else 56.dp).clip(shape).background(c.raised).border(1.dp, c.line, shape)
+            .padding(horizontal = if (compact) 16.dp else 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon) {
-            Icon(Icons.search, c.textMuted, 22.dp)
-            Spacer(Modifier.width(12.dp))
+            Icon(Icons.search, c.textMuted, if (compact) 18.dp else 22.dp)
+            Spacer(Modifier.width(if (compact) 10.dp else 12.dp))
         }
         Box(Modifier.weight(1f)) {
             if (value.isEmpty()) Label(hint, Typography.body, c.textMuted, maxLines = 1)
@@ -317,6 +422,7 @@ fun TextInput(value: String, onChange: (String) -> Unit, hint: String, modifier:
                 singleLine = true,
                 cursorBrush = SolidColor(c.accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = onDone?.let { done -> KeyboardActions(onDone = { done() }) } ?: KeyboardActions.Default,
             )
         }
     }

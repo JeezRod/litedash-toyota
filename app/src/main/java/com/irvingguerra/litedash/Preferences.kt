@@ -11,19 +11,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.content.edit
+import com.irvingguerra.litedash.core.ui.CardStyle
 import com.irvingguerra.litedash.feature.car.CarColors
 import com.irvingguerra.litedash.feature.car.CarPaint
 import com.irvingguerra.litedash.feature.car.DEFAULT_GLOSS
 import com.irvingguerra.litedash.feature.car.PaintFinish
+import com.irvingguerra.litedash.feature.dashboard.DashboardStore
+import com.irvingguerra.litedash.feature.dashboard.Tile
+import com.irvingguerra.litedash.feature.dashboard.TileTypes
+import com.irvingguerra.litedash.feature.map.MapLook
 import java.util.Locale
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
-/**
- * Claves y valores guardados en el dispositivo, en inglés desde la 1.4.47. Lo que
- * guardaron las versiones anteriores (en español) lo copia una sola vez
- * [StorageMigration]; cambiar estos nombres borraría los ajustes de quien ya tiene LiteDash.
- */
+/** Claves y valores guardados en el dispositivo: cambiar estos nombres borraría los ajustes de quien ya tiene LiteDash. */
 internal object PrefKeys {
     const val FILE = "settings"
     const val THEME = "theme"
@@ -35,7 +36,16 @@ internal object PrefKeys {
     const val CAR_GLOSS = "car_gloss"
     /** Int ARGB; sin guardar = el color natural. */
     const val ACCENT_COLOR = "accent_color_argb"
+    /** Las tarjetas del inicio: Int ARGB (sin guardar = la del tema), estilo y cuánto se ven (0–1). */
+    const val CARD_COLOR = "card_color_argb"
+    const val CARD_STYLE = "card_style"
+    const val CARD_OPACITY = "card_opacity"
+    /** Cuánto se oscurece (o aclara) tu fondo de pantalla en el inicio (0–[MAX_WALLPAPER_DIM]). */
+    const val WALLPAPER_DIM = "wallpaper_dim"
     const val CAR_MODEL = "car_model"
+    const val DESIGN = "design"
+    const val DESIGN_UNDO = "design_undo"
+    const val DESIGN_WALLPAPER = "design_wallpaper"
     const val BUNDLED_CAR_SEEDED = "bundled_car_seeded"
     const val WELCOME_SEEN = "welcome_seen"
     const val WELCOME_STEP = "welcome_step"
@@ -46,11 +56,19 @@ internal object PrefKeys {
     const val DOCK = "dock"
     const val MAP_APP = "map_app"
     const val MAP_EXTERNAL = "map_external"
+    const val PROJECTION_APP = "projection_app"
+    const val PHONE_APP = "phone_app"
+    /** Ya se pasó la app propia de los widgets Android Auto / CarPlay y Teléfono, y el aspecto del Mapa, a lo de toda la app ([Preferences.adoptWidgetApps]). */
+    const val WIDGET_APPS_ADOPTED = "widget_apps_adopted"
     const val MAP_LOOK = "map_look"
+    const val GUIDE_MAP_NORTH = "guide_map_north"
+    const val GUIDE_CAR_VIEW = "guide_car_view"
     const val MUSIC_APP = "music_app"
     const val DRIVER_NAME = "driver_name"
     const val HOME_ADDRESS = "home_address"
     const val WORK_ADDRESS = "work_address"
+    const val FAVORITE_PLACES = "favorite_places"
+    const val RECENT_PLACES = "recent_places"
     const val PARKED_MODE = "parked_mode"
     const val PARKED_VIEW = "parked_view"
     const val WHEEL_KEYS = "wheel_keys"
@@ -72,9 +90,11 @@ internal object PrefKeys {
     /** Los botones de la barra en orden ([BarItem]); sin guardar, se arman de las opciones de antes. */
     const val BAR_ITEMS = "bar_items"
     const val BAR_BLUETOOTH_ADDED = "bar_bluetooth_added"
+    const val BAR_HOME_ADDED = "bar_home_added"
+    const val BAR_PROJECTION_ADDED = "bar_projection_added"
     const val BAR_STYLE = "bar_style"
+    const val BAR_HIDDEN = "bar_hidden"
     const val LOGO_INTRO = "logo_intro"
-    const val INTRO_MIGRATED = "intro_image_migrated"
     const val LIGHTS_KEY = "lights_key"
     const val LIGHTS_ON = "lights_on_value"
     const val SPLIT_SCREEN = "split_screen"
@@ -93,8 +113,6 @@ internal object PrefKeys {
     const val OBD_MODULE = "obd_module"
     const val SPEED_UNITS = "speed_units"
     const val TEMP_UNITS = "temp_units"
-    /** Int: versión del almacenamiento ([StorageMigration]: 1 = nombres en inglés, 2 = tres piezas del auto). */
-    const val STORAGE_VERSION = "storage_version"
 }
 
 /** Las llantas sobre la pieza del auto: pastillas en las ruedas, en las esquinas o nada. */
@@ -113,7 +131,8 @@ enum class CarTap(val stored: String) {
     BIG("big"), TIRES("tires");
 
     companion object {
-        fun fromStored(value: String?) = entries.firstOrNull { it.stored == value } ?: TIRES
+        // De fábrica, en grande (quien eligió «Ver sus llantas» lo tiene guardado y lo conserva).
+        fun fromStored(value: String?) = entries.firstOrNull { it.stored == value } ?: BIG
     }
 }
 
@@ -126,7 +145,7 @@ enum class ParkedView(val stored: String) {
     }
 }
 
-/** Dónde va la barra con la hora y tus apps. AUTO = a un lado si la pantalla está acostada. */
+/** Dónde va la barra de tus apps. AUTO = a un lado si la pantalla está acostada. */
 enum class BarPosition(val stored: String) {
     // SIDE = a la izquierda (como se guardaba antes de haber derecha).
     AUTO("auto"), SIDE("side"), RIGHT("right"), BOTTOM("bottom");
@@ -146,27 +165,89 @@ enum class BarSize(val stored: String, val scale: Float) {
 }
 
 /**
- * Un botón de la barra de apps. Los de antes de [FAVORITES] van a la izquierda (arriba en la lateral) y
- * los de después a la derecha; tus apps favoritas, al centro. [SETTINGS] siempre va y al final: sin él no
- * habría cómo salir del inicio.
+ * Un botón de la barra de apps. Dónde va (principio, centro o final) lo deciden las dos divisiones
+ * [SPLIT_START] y [SPLIT_END]; tus favoritas ([FAVORITES]) son un botón más. [SETTINGS] siempre va y al final:
+ * sin él no habría cómo salir del inicio.
  */
 enum class BarItem(val stored: String) {
-    APPS("apps"), MUSIC("music"), VOLUME("volume"), NAVIGATE("navigate"), BLUETOOTH("bluetooth"), PHONE("phone"),
-    VOICE("voice"), FAVORITES("favorites"), MUTE("mute"), SETTINGS("settings");
+    HOME("home"), APPS("apps"), MUSIC("music"), VOLUME("volume"), NAVIGATE("navigate"), BLUETOOTH("bluetooth"), PROJECTION("projection"),
+    PHONE("phone"),
+    VOICE("voice"), FAVORITES("favorites"), MUTE("mute"), SETTINGS("settings"),
+
+    /**
+     * Las dos divisiones de la barra (no son botones): lo de antes de la primera va al principio (izquierda o
+     * arriba), lo de entre las dos al centro y lo de después al final. Al acomodar se arrastran como un botón.
+     */
+    SPLIT_START("split1"), SPLIT_END("split2");
+
+    val isSplit get() = this == SPLIT_START || this == SPLIT_END
 
     companion object {
         fun fromStored(value: String) = entries.firstOrNull { it.stored == value }
 
-        /** Ajustes al final y una sola vez; lo que no se conoce, fuera. */
-        fun normalize(items: List<BarItem>) = items.distinct().filter { it != SETTINGS } + SETTINGS
+        /**
+         * Ajustes al final y una sola vez; lo que no se conoce, fuera; y las dos divisiones siempre, en orden. A una
+         * barra guardada sin divisiones se le ponen donde iban: alrededor de tus favoritas (eran el centro) o, sin
+         * ellas, al final (todo al principio y Ajustes al final).
+         */
+        fun normalize(items: List<BarItem>): List<BarItem> {
+            val list = items.distinct().filter { it != SETTINGS }
+            val zoned = if (list.count { it.isSplit } == 2) list else {
+                val plain = list.filter { !it.isSplit }
+                val favorites = plain.indexOf(FAVORITES)
+                if (favorites < 0) plain + SPLIT_START + SPLIT_END
+                else plain.take(favorites) + SPLIT_START + FAVORITES + SPLIT_END + plain.drop(favorites + 1)
+            }
+            // La primera que aparece es la del principio (se pueden cruzar al arrastrarlas).
+            var first = true
+            return zoned.map { if (!it.isSplit) it else if (first) SPLIT_START.also { first = false } else SPLIT_END } + SETTINGS
+        }
+
+        /** [items] con [item] agregado: tus favoritas al centro; un botón, al final (antes de Ajustes). */
+        fun add(items: List<BarItem>, item: BarItem): List<BarItem> {
+            val all = normalize(items)
+            if (item in all) return all
+            val at = if (item == FAVORITES) all.indexOf(SPLIT_START) + 1 else all.size - 1
+            return all.toMutableList().apply { add(at, item) }
+        }
+
+        /**
+         * [items] con Android Auto / CarPlay puesto (si no lo tiene): después de Bluetooth; sin él, al final de la parte
+         * donde está Navegar; sin ninguno, al final del centro (antes de la segunda división).
+         */
+        fun withProjection(items: List<BarItem>): List<BarItem> {
+            val all = normalize(items)
+            if (PROJECTION in all) return all
+            val bluetooth = all.indexOf(BLUETOOTH)
+            val navigate = all.indexOf(NAVIGATE)
+            val at = when {
+                bluetooth >= 0 -> bluetooth + 1
+                navigate >= 0 -> (navigate + 1 until all.size).first { all[it].isSplit || all[it] == SETTINGS }
+                else -> all.indexOf(SPLIT_END)
+            }
+            return normalize(all.toMutableList().apply { add(at, PROJECTION) })
+        }
+
+        /**
+         * El agregado de una sola vez a una barra guardada: como [withProjection], salvo que ya tenga una app de Android
+         * Auto / CarPlay entre sus favoritas PROPIAS a la vista ([ownFavorites] = sus claves de app; null = las sugeridas,
+         * que ya la quitan solas si está el botón): ahí serían dos botones que abren lo mismo.
+         */
+        fun withProjectionOnce(items: List<BarItem>, ownFavorites: List<String>?): List<BarItem> {
+            val all = normalize(items)
+            val hasOwn = FAVORITES in all && ownFavorites.orEmpty().any { isProjectionPackage(it.substringBefore('/')) }
+            return if (hasOwn) all else withProjection(all)
+        }
     }
 }
 
 /**
- * La barra de fábrica: Apps, volumen y Música; tus favoritas (vacías: ninguna app de fábrica); Navegar, voz y
- * Ajustes. Teléfono se agrega si se quiere.
+ * La barra de fábrica: Inicio, Apps, volumen y Música; tus favoritas (vacías: ninguna app de fábrica); Navegar, Bluetooth,
+ * Android Auto / CarPlay, voz y Ajustes. Teléfono se agrega si se quiere.
  */
-private val DEFAULT_BAR = listOf(BarItem.APPS, BarItem.VOLUME, BarItem.MUSIC, BarItem.FAVORITES, BarItem.NAVIGATE, BarItem.BLUETOOTH, BarItem.VOICE)
+private val DEFAULT_BAR = listOf(
+    BarItem.HOME, BarItem.APPS, BarItem.VOLUME, BarItem.MUSIC, BarItem.FAVORITES, BarItem.NAVIGATE, BarItem.BLUETOOTH, BarItem.PROJECTION, BarItem.VOICE,
+)
 
 /** Las opciones de la barra de antes de poder editarla: si alguna se guardó, se respeta lo de esa persona. */
 private val LEGACY_BAR_KEYS = listOf(PrefKeys.BAR_APPS, PrefKeys.BAR_MUSIC, PrefKeys.BAR_VOLUME, PrefKeys.BAR_FAVORITES, PrefKeys.BAR_VOICE, PrefKeys.BAR_CLOCK)
@@ -207,21 +288,82 @@ enum class NightSource(val stored: String) {
     }
 }
 
-/** Idioma de la app: "" = el del sistema. Se lee antes de crear la pantalla. */
+/**
+ * Idioma de la app: "" = el del sistema. Se lee del disco una vez (antes de crear la pantalla) y después
+ * se recuerda; [Preferences.language] lo cambia aquí también.
+ */
 object Language {
-    fun read(context: Context) = context.getSharedPreferences(PrefKeys.FILE, Context.MODE_PRIVATE).getString(PrefKeys.LANGUAGE, "") ?: ""
+    @Volatile private var current: String? = null
+
+    fun read(context: Context): String = current
+        ?: (context.getSharedPreferences(PrefKeys.FILE, Context.MODE_PRIVATE).getString(PrefKeys.LANGUAGE, "") ?: "").also { current = it }
+
+    internal fun changed(language: String) {
+        current = language
+    }
 }
 
-/** [base] con el idioma elegido en Ajustes. */
+/**
+ * El idioma con región para [language]: la del sistema si habla ese idioma (es-MX: "12.6 V"); si no, para el
+ * español México, que escribe los decimales con punto (el español genérico usa coma). JVM pura para probarla.
+ */
+internal fun localeFor(language: String, system: Locale): Locale =
+    if (system.language == language) system else Locale.forLanguageTag(if (language == "es") "es-MX" else language)
+
+/** Idiomas de España sin paquete que con «Como el sistema» siguen en el español de la APK (no en inglés). */
+private val SPANISH_FALLBACK = setOf("ca", "gl", "eu")
+
+/**
+ * Con «Como el sistema» ([Language] vacío): el idioma de la app según el del sistema ([system]). "" = el del sistema
+ * tal cual (español o inglés, que vienen en la APK). Otro idioma: el paquete ya bajado de ese idioma ([downloaded]; con
+ * región primero, "pt-BR" y luego "pt"); si no hay, inglés: `values/` es español, y un sistema en alemán caía ahí. No
+ * baja nada. JVM pura para probarla.
+ */
+internal fun systemLanguage(system: Locale, downloaded: (String) -> Boolean): String {
+    // toLanguageTag y no language: Android dice "in" al indonesio, y el paquete es "id".
+    val language = system.toLanguageTag().substringBefore('-')
+    // Catalán, gallego y vasco: el español de la APK (`values/`) les queda mejor que el inglés, como en la 1.5.14.
+    if (language in BUILT_IN_LANGUAGES || language in SPANISH_FALLBACK || language == "und") return ""
+    val regional = system.country.takeIf { it.isNotEmpty() }?.let { "$language-$it" }
+    return listOfNotNull(regional, language).firstOrNull { isDownloadableTag(it) && downloaded(it) } ?: "en"
+}
+
+/**
+ * El idioma que de verdad se ve en [base] y su paquete: el elegido en Ajustes o, con «Como el sistema», el de
+ * [systemLanguage]; "" = el del sistema tal cual. Un idioma bajado que ya no está o no sirve sale en inglés.
+ */
+internal fun shownLanguage(base: Context): Pair<String, LanguagePack?> {
+    val language = Language.read(base).ifBlank {
+        systemLanguage(primaryLocale(base.resources.configuration)) { LanguagePacks.file(base, it).exists() }
+    }
+    if (language.isEmpty() || language in BUILT_IN_LANGUAGES) return language to null
+    val pack = LanguagePacks.active(base, language) ?: return "en" to null
+    return language to pack
+}
+
+/**
+ * [base] con el idioma de [shownLanguage]. El ÚNICO lugar donde se aplica el idioma: las actividades al
+ * crearse y los textos del contexto de la aplicación ([LiteDashApp.getResources]) pasan por aquí.
+ */
 fun contextWithLanguage(base: Context): Context {
-    val language = Language.read(base)
-    if (language.isBlank()) return base
-    // Con la región del sistema si habla ese idioma (es-MX: "12.6 V"); si no, México, que
-    // escribe los decimales con punto (el español genérico usa coma).
+    val (language, pack) = shownLanguage(base)
+    if (language.isEmpty()) return base
     val system = primaryLocale(Resources.getSystem().configuration)
-    val locale = if (system.language == language) system else Locale.forLanguageTag(if (language == "es") "es-MX" else language)
-    val config = Configuration(base.resources.configuration).apply { setLocale(locale) }
-    return base.createConfigurationContext(config)
+    // Un idioma bajado: sus textos encima del inglés de la APK ([TranslatedResources]).
+    val locale = localeFor(language, system)
+    val localized = base.createConfigurationContext(languageConfig(locale))
+    if (pack == null) return localized
+    val english = base.createConfigurationContext(languageConfig(localeFor("en", system))).resources
+    return TranslatedContext(localized, english, pack, locale)
+}
+
+/**
+ * Solo el idioma encima de lo del sistema (no una copia de toda la configuración): al girar la pantalla o cambiar el
+ * modo noche, lo demás sigue al sistema. fontScale = 0 = "sin cambiar" (1 pisaría la letra del usuario).
+ */
+private fun languageConfig(locale: Locale) = Configuration().apply {
+    fontScale = 0f
+    setLocale(locale)
 }
 
 /**
@@ -241,10 +383,19 @@ private class Stored<T>(initial: T, private val save: (T) -> Unit) : ReadWritePr
 class Preferences(context: Context) {
     private val p = context.getSharedPreferences(PrefKeys.FILE, Context.MODE_PRIVATE)
 
+    /** Es la primera vez que se abre LiteDash aquí (no una actualización): lo de fábrica nuevo solo va para ellos. */
+    val freshInstall = isFreshInstall(p.contains(PrefKeys.WELCOME_SEEN), p.contains(PrefKeys.DOCK))
+
     init {
-        // Instalación nueva: tus favoritas de la barra empiezan vacías (antes se sugerían las instaladas, y quien
-        // ya tenía LiteDash las conserva).
-        if (!p.contains(PrefKeys.WELCOME_SEEN) && !p.contains(PrefKeys.DOCK)) p.edit { putString(PrefKeys.DOCK, "") }
+        if (freshInstall) p.edit {
+            // Tus favoritas de la barra empiezan vacías (antes se sugerían las instaladas, y quien ya tenía LiteDash las
+            // conserva).
+            putString(PrefKeys.DOCK, "")
+            // Arranca con el Diseño de fábrica (sus colores ya son los de fábrica; su fondo se baja cuando haya internet).
+            // Quien actualiza no ve nada distinto.
+            putString(PrefKeys.DESIGN, FACTORY_DESIGN.id)
+            FACTORY_DESIGN.wallpaper?.let { putString(PrefKeys.DESIGN_WALLPAPER, it) }
+        }
     }
 
     private fun bool(key: String, default: Boolean) = Stored(p.getBoolean(key, default)) { p.edit { putBoolean(key, it) } }
@@ -304,9 +455,62 @@ class Preferences(context: Context) {
         _accent = v.toArgb()
     }
 
+    // El color de las tarjetas de toda la app; null = el del tema.
+    private var _card by mutableStateOf(if (p.contains(PrefKeys.CARD_COLOR)) p.getInt(PrefKeys.CARD_COLOR, 0) else null)
+    var cardColor: Color?
+        get() = _card?.let { Color(it) }
+        set(v) {
+            _card = v?.toArgb()
+            p.edit { if (v == null) remove(PrefKeys.CARD_COLOR) else putInt(PrefKeys.CARD_COLOR, v.toArgb()) }
+        }
+
+    /** Mientras se arrastra el selector: las tarjetas cambian en vivo y se guarda al soltar ([cardColor]). */
+    fun previewCardColor(v: Color) {
+        _card = v.toArgb()
+    }
+
+    /** Lisas o de vidrio (lo de fábrica). */
+    var cardStyle by mapped(PrefKeys.CARD_STYLE, CardStyle::fromStored) { it.stored }
+
+    /** El filo de luz de las de vidrio: sin él (lo de fábrica), delgado o marcado. */
+
+    // Cuánto se ven las de vidrio (0–1); se arrastra en vivo y se guarda al soltar.
+    private var _cardOpacity by mutableFloatStateOf(p.getFloat(PrefKeys.CARD_OPACITY, DEFAULT_CARD_OPACITY))
+    var cardOpacity: Float
+        get() = _cardOpacity
+        set(v) {
+            _cardOpacity = v
+            p.edit { putFloat(PrefKeys.CARD_OPACITY, v) }
+        }
+
+    fun previewCardOpacity(v: Float) {
+        _cardOpacity = v
+    }
+
+    // Oscurecer el fondo (tu imagen en el inicio); se arrastra en vivo y se guarda al soltar.
+    private var _wallpaperDim by mutableFloatStateOf(p.getFloat(PrefKeys.WALLPAPER_DIM, DEFAULT_WALLPAPER_DIM).coerceIn(0f, MAX_WALLPAPER_DIM))
+    var wallpaperDim: Float
+        get() = _wallpaperDim
+        set(v) {
+            _wallpaperDim = v
+            p.edit { putFloat(PrefKeys.WALLPAPER_DIM, v) }
+        }
+
+    fun previewWallpaperDim(v: Float) {
+        _wallpaperDim = v
+    }
+
     /** Id del auto del catálogo que se muestra; null = el sedán genérico. */
     var carModel by string(PrefKeys.CAR_MODEL)
 
+    /** El último Diseño que se aplicó ([Design.id]); null = ninguno (quien ya tenía LiteDash antes de los Diseños). */
+    var design by string(PrefKeys.DESIGN)
+
+    /** Lo de antes del último Diseño, para «Deshacer» ([DesignUndo]); null = no hay qué deshacer. */
+    var designUndo by string(PrefKeys.DESIGN_UNDO)
+
+    /** El fondo de LiteDash de un Diseño que espera internet para bajarse (solo una vez); null = ninguno. */
+    var designWallpaper by string(PrefKeys.DESIGN_WALLPAPER)
     /** El auto que viene en la app ya se instaló una vez: si lo borras, no vuelve ([CarRepository.seedBundled]). */
     var bundledCarSeeded by bool(PrefKeys.BUNDLED_CAR_SEEDED, false)
 
@@ -321,8 +525,11 @@ class Preferences(context: Context) {
     /** Abrir LiteDash al encender la pantalla ([BootLaunch]); apagado de fábrica. */
     var openOnBoot by bool(PrefKeys.OPEN_ON_BOOT, false)
 
-    /** "" (sistema), "es" o "en". Cambiarlo recrea la actividad: se escribe al instante (commit). */
-    var language by Stored(p.getString(PrefKeys.LANGUAGE, "") ?: "") { p.edit(commit = true) { putString(PrefKeys.LANGUAGE, it) } }
+    /** "" (sistema), "es", "en" o un idioma bajado ("tr", [LanguagePacks]). Cambiarlo reabre la actividad: se escribe al instante (commit). */
+    var language by Stored(p.getString(PrefKeys.LANGUAGE, "") ?: "") {
+        p.edit(commit = true) { putString(PrefKeys.LANGUAGE, it) }
+        Language.changed(it)
+    }
 
     /** Apps que no salen en el cajón ([com.irvingguerra.litedash.feature.apps.App.key]). */
     var hidden by Stored(p.getStringSet(PrefKeys.HIDDEN, emptySet())!!.toSet()) { p.edit { putStringSet(PrefKeys.HIDDEN, it) } }
@@ -333,17 +540,48 @@ class Preferences(context: Context) {
     /** App de navegación elegida ([com.irvingguerra.litedash.feature.apps.App.key]); null = la primera instalada. */
     var mapApp by string(PrefKeys.MAP_APP)
 
+    /** Usar tu app de mapas: el toque al widget Mapa, Casa/Trabajo, la barra y el volante la abren (apagado de fábrica: el mapa de LiteDash). */
+    var mapExternal by bool(PrefKeys.MAP_EXTERNAL, false)
+
+    /** Tu app de Android Auto / CarPlay ([com.irvingguerra.litedash.feature.apps.App.key]); null = la que encuentre LiteDash ([projectionChoice]). */
+    var projectionApp by string(PrefKeys.PROJECTION_APP)
+
+    /** Tu app de llamadas ([com.irvingguerra.litedash.feature.apps.App.key]): la abren el widget Teléfono, la barra y el volante; null = el marcador. */
+    var phoneApp by string(PrefKeys.PHONE_APP)
+
     /**
-     * Los accesos directos al mapa (botón de la barra, del volante y el toque al widget Mapa) abren tu app de
-     * navegación; apagado, el mapa de LiteDash en grande.
+     * Hasta la 1.5.15 los widgets Android Auto / CarPlay y Teléfono guardaban su propia app (en sus datos) y el Mapa su
+     * propio aspecto; ahora hay uno solo para toda la app. Una vez, al arrancar y antes de cargar el inicio: lo del acomodo
+     * guardado más nuevo pasa a ser lo de toda la app (si no había otro elegido) y esos widgets se quedan sin su app (los
+     * datos del Mapa se quedan: ya no se leen) ([WidgetAdoption]).
+     * Quitar cuando < 5 % de las pantallas esté antes de la 1.5.16 según docs/usuarios.py.
      */
-    var mapExternal by bool(PrefKeys.MAP_EXTERNAL, true)
+    fun adoptWidgetApps(store: DashboardStore) {
+        if (p.getBoolean(PrefKeys.WIDGET_APPS_ADOPTED, false)) return
+        p.edit { putBoolean(PrefKeys.WIDGET_APPS_ADOPTED, true) }
+        val found = WidgetAdoption()
+        store.changeDataEverywhere(found::visit)
+        if (projectionApp == null) found.projection?.let { projectionApp = it }
+        if (phoneApp == null) found.phone?.let { phoneApp = it }
+        if (mapLook == null) found.mapLook?.let { mapLook = it }
+    }
+
+    /**
+     * El mapa de la guía (vista Flecha) plano y al norte en vez de inclinado hacia donde vas (botón de la brújula).
+     * Reemplaza a `guide_map_heading` (hasta la 1.5.16, de fábrica al norte): ahora de fábrica va inclinado.
+     */
+    var guideMapNorth by bool(PrefKeys.GUIDE_MAP_NORTH, false)
+
+    /** Navegando en un mapa grande (widget o en grande): la vista Auto (tu auto de espaldas) en vez de la Flecha. */
+    var guideCarView by bool(PrefKeys.GUIDE_CAR_VIEW, false)
+
+    /** En el mapa de fondo del inicio: tu auto visto de atrás en vez de la flecha (de fábrica, la flecha). */
 
     /** El aspecto del mapa de LiteDash ([com.irvingguerra.litedash.feature.map.MapLook.encode]); null = el de fábrica. */
     var mapLook by string(PrefKeys.MAP_LOOK)
 
-    /** La app de música de antes de la 1.4.116: solo se lee una vez para pasarla a `MusicRepository.preferred`, que es la que vale. */
-    var musicApp by string(PrefKeys.MUSIC_APP)
+    /** La app de música de antes de la 1.4.116: solo se lee al arrancar para pasarla a `MusicRepository.preferred`, que es la que vale. Quitar cuando < 5 % de las pantallas esté antes de la 1.4.140 según docs/usuarios.py. */
+    val musicApp: String? get() = p.getString(PrefKeys.MUSIC_APP, null)
 
     /** Nombre de quien maneja, para saludarlo; null = sin saludo. */
     var driverName by string(PrefKeys.DRIVER_NAME)
@@ -354,30 +592,60 @@ class Preferences(context: Context) {
     /** Dirección de Trabajo para el atajo del widget Mapa; null = sin guardar. */
     var workAddress by string(PrefKeys.WORK_ADDRESS)
 
+    /** Tus lugares favoritos del buscador del mapa (JSON de [placesToJson]); null = ninguno. */
+    var favoritePlaces by string(PrefKeys.FAVORITE_PLACES)
+
+    /** Tus últimos destinos del buscador (JSON, el más nuevo primero); se quedan en la pantalla. */
+    var recentPlaces by string(PrefKeys.RECENT_PLACES)
+
     /** Reloj grande tras unos minutos sin tocar el inicio. */
     var parkedMode by bool(PrefKeys.PARKED_MODE, true)
 
     /** Lo que muestra el modo estacionado (de fábrica, el reloj). */
     var parkedView by mapped(PrefKeys.PARKED_VIEW, ParkedView::fromStored) { it.stored }
 
-    /** Dónde van la hora y tus apps: a un lado, abajo o según la pantalla. */
+    /** Dónde va la barra de tus apps: a un lado, abajo o según la pantalla. */
     var barPosition by mapped(PrefKeys.BAR_POSITION, BarPosition::fromStored) { it.stored }
     var barSize by mapped(PrefKeys.BAR_SIZE, BarSize::fromStored) { it.stored }
     var barStyle by mapped(PrefKeys.BAR_STYLE, BarStyle::fromStored) { it.stored }
 
-    /** Los botones de la barra en orden (siempre con Ajustes al final, [BarItem.normalize]). */
+    /** La barra de LiteDash oculta: solo se ve al acomodar el inicio (de ahí se entra a Ajustes). */
+    var barHidden by bool(PrefKeys.BAR_HIDDEN, false)
+
+    /** Los botones de la barra en orden, con sus dos divisiones (siempre con Ajustes al final, [BarItem.normalize]). */
     var barItems: List<BarItem>
         get() = storedBarItems
         set(value) {
             storedBarItems = BarItem.normalize(value)
         }
+    /** El botón de Inicio llegó en la 1.5.9: una sola vez se le pone, al principio, a quien ya tenía su barra. Si luego lo quita, no regresa. */
+    fun addHomeToBar() {
+        if (p.getBoolean(PrefKeys.BAR_HOME_ADDED, false)) return
+        p.edit { putBoolean(PrefKeys.BAR_HOME_ADDED, true) }
+        val items = barItems
+        if (BarItem.HOME !in items) barItems = listOf(BarItem.HOME) + items
+    }
+
+    /**
+     * El botón de Android Auto / CarPlay llegó después de la 1.5.14 (Irving: de fábrica, como Bluetooth): una sola vez
+     * se le pone a quien ya tenía su barra ([BarItem.withProjectionOnce]: no a quien ya tiene ZLink, CarPlay… entre sus
+     * favoritas propias). Si luego lo quita, no regresa.
+     */
+    fun addProjectionToBar() {
+        if (p.getBoolean(PrefKeys.BAR_PROJECTION_ADDED, false)) return
+        p.edit { putBoolean(PrefKeys.BAR_PROJECTION_ADDED, true) }
+        val items = barItems
+        // Se marca como hecho aunque no se agregue (ya la tenía de favorita): así no aparece después.
+        if (BarItem.PROJECTION !in items) barItems = BarItem.withProjectionOnce(items, dock)
+    }
+
     /**
      * El botón de Bluetooth llegó a la barra en la 1.4.140 (Irving: "por defecto, como el del mapa"): una
      * sola vez se le pone, junto al de navegar, a quien ya tenía su barra. Si luego lo quita, no regresa.
      */
     fun addBluetoothToBar() {
         if (p.getBoolean(PrefKeys.BAR_BLUETOOTH_ADDED, false)) return
-        p.edit().putBoolean(PrefKeys.BAR_BLUETOOTH_ADDED, true).apply()
+        p.edit { putBoolean(PrefKeys.BAR_BLUETOOTH_ADDED, true) }
         val items = barItems
         if (BarItem.BLUETOOTH in items) return
         val after = items.indexOf(BarItem.NAVIGATE).takeIf { it >= 0 } ?: (items.size - 2)
@@ -393,6 +661,7 @@ class Preferences(context: Context) {
     /**
      * Los botones como se veían antes de poder editar la barra (Plan Widgets): de los interruptores y del
      * lugar del volumen de Ajustes → Barra de apps. Solo se leen mientras no se guarde una lista.
+     * Quitar cuando < 5 % de las pantallas esté antes de la 1.4.140 según docs/usuarios.py.
      */
     private fun legacyBarItems(): List<BarItem> {
         // Quien nunca tocó la barra: la de fábrica (Irving, 2026-11-09).
@@ -418,13 +687,15 @@ class Preferences(context: Context) {
     var splitRoad by bool(PrefKeys.SPLIT_ROAD, false)
 
     /**
-     * El interruptor de la radio por internet de antes de la 1.4.112: solo se lee una vez para pasar
-     * a la radio escogida (`MusicRepository.radioInternet`), que es la que vale.
+     * El interruptor de la radio por internet de antes de la 1.4.112: solo se lee al arrancar para pasar
+     * a la radio escogida (`MusicRepository.radioInternet`), que es la que vale. null = ya se pasó.
+     * Quitar cuando < 5 % de las pantallas esté antes de la 1.4.140 según docs/usuarios.py.
      */
-    var internetRadio by bool(PrefKeys.INTERNET_RADIO, false)
+    fun legacyInternetRadio(): Boolean? =
+        if (p.getBoolean(PrefKeys.RADIO_UNIFIED, false)) null else p.getBoolean(PrefKeys.INTERNET_RADIO, false)
 
-    /** Ya se pasó [internetRadio] a la radio escogida. */
-    var radioUnified by bool(PrefKeys.RADIO_UNIFIED, false)
+    /** Ya se pasó [legacyInternetRadio] a la radio escogida. */
+    fun internetRadioUnified() = p.edit { putBoolean(PrefKeys.RADIO_UNIFIED, true) }
 
     /** Guardar un resumen de cada viaje con el OBD conectado (apagado de fábrica). */
     var tripLog by bool(PrefKeys.TRIP_LOG, false)
@@ -509,4 +780,41 @@ class Preferences(context: Context) {
         get() = p.getString(PrefKeys.BRIGHTNESS_ORIGINAL, null)?.split(',')?.mapNotNull { it.toIntOrNull() }
             ?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
         set(v) = p.edit { putString(PrefKeys.BRIGHTNESS_ORIGINAL, v?.let { "${it.first},${it.second}" }) }
+}
+
+/** De fábrica, el vidrio va como cristal: sin relleno (el control «Cuánto se ven» lo llena). */
+const val DEFAULT_CARD_OPACITY = com.irvingguerra.litedash.core.ui.MIN_OPACITY
+
+/** El velo de fábrica sobre tu fondo de pantalla (el de siempre) y lo más que se puede cerrar. */
+const val DEFAULT_WALLPAPER_DIM = 0.4f
+const val MAX_WALLPAPER_DIM = 0.6f
+
+/**
+ * Lo que [Preferences.adoptWidgetApps] toma de los widgets, recorridos del acomodo más nuevo al más viejo: la primera app
+ * de un Android Auto / CarPlay y de un Teléfono, y el aspecto del primer Mapa (sin el «detail» de antes; null si es el
+ * de fábrica). [visit] da los datos nuevos de la pieza (null = igual).
+ */
+internal class WidgetAdoption {
+    var projection: String? = null
+        private set
+    var phone: String? = null
+        private set
+    var mapLook: String? = null
+        private set
+    private var sawMap = false
+
+    fun visit(t: Tile): String? {
+        if (t.type == TileTypes.MAP) {
+            if (!sawMap) mapLook = MapLook.parse(t.data).encode().ifEmpty { null }
+            sawMap = true
+            return null
+        }
+        val own = appKeyOf(t.data) ?: return null
+        when (t.type) {
+            TileTypes.PROJECTION -> projection = projection ?: own
+            TileTypes.PHONE -> phone = phone ?: own
+            else -> return null
+        }
+        return withAppKey(t.data, null)
+    }
 }

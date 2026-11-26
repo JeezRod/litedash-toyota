@@ -1,16 +1,16 @@
 package com.irvingguerra.litedash
 
-import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,6 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,10 +34,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import com.irvingguerra.litedash.core.ui.Button
 import com.irvingguerra.litedash.core.ui.Card
 import com.irvingguerra.litedash.core.ui.Icon
@@ -46,30 +48,70 @@ import com.irvingguerra.litedash.core.ui.Label
 import com.irvingguerra.litedash.core.ui.LocalColors
 import com.irvingguerra.litedash.core.ui.TextInput
 import com.irvingguerra.litedash.core.ui.Typography
+import com.irvingguerra.litedash.core.ui.blockTouches
 import com.irvingguerra.litedash.feature.apps.App
 import com.irvingguerra.litedash.feature.apps.AppGrid
 import com.irvingguerra.litedash.feature.dashboard.TileTypes
 import com.irvingguerra.litedash.feature.obd.ObdState
 
-/** Panel a pantalla completa sobre el inicio, con título y botón para cerrar. */
+/**
+ * Paneles a pantalla completa en pantallas muy bajas (8.8" de 1280×480): todo se dibuja más chico para que quepa,
+ * sin tocar el tamaño del inicio. Con más de [below] de alto no cambia nada.
+ */
+@Composable
+internal fun FitShort(below: Dp = SHORT_PANEL_HEIGHT, content: @Composable () -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val d = LocalDensity.current
+        // El teclado no cuenta (donde sí se le aparta, el alto baja): si contara, en un celular acostado al abrirlo todo se achicaría.
+        val keyboard = with(d) { WindowInsets.ime.getBottom(this).toDp() }
+        val fit = ((maxHeight + keyboard) / below).coerceIn(MIN_PANEL_FIT, 1f)
+        // Siempre por el mismo camino: si cambiara de rama, lo de adentro se rehace y un buscador perdería el foco (y el
+        // teclado se cerraría al instante).
+        CompositionLocalProvider(LocalDensity provides if (fit >= 1f) d else Density(d.density * fit, d.fontScale)) { content() }
+    }
+}
+
+/** Por debajo de esta altura los paneles se achican (Ajustes trae título, pestañas y una tarjeta). */
+private val SHORT_PANEL_HEIGHT = 400.dp
+
+/** Lo que crece desde un widget (música, radio, mapa) vive arriba de la barra: se achica solo si queda muy bajo. */
+internal val SHORT_EXPANDED_HEIGHT = 300.dp
+
+/** Nunca más chico que esto: los textos deben seguir leyéndose. */
+private const val MIN_PANEL_FIT = 0.72f
+
+/**
+ * Panel a pantalla completa sobre el inicio, con título y botón para cerrar. [header] va centrado entre los dos (el
+ * buscador de apps: en pantallas bajas un renglón propio le quitaba media fila a la lista, #28).
+ */
 @Composable
 internal fun PanelScaffold(
     title: String,
     close: () -> Unit,
+    header: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val c = LocalColors.current
     Column(
         Modifier
             .fillMaxSize()
-            .background(c.background)
+            .canvas()
             // Atrapa los toques para que no lleguen al inicio de abajo.
-            .clickable(remember { MutableInteractionSource() }, indication = null) {}
+            .blockTouches()
             .safeDrawingPadding()
             .padding(horizontal = 24.dp),
     ) {
         Row(Modifier.fillMaxWidth().height(72.dp), verticalAlignment = Alignment.CenterVertically) {
-            Label(title, Typography.title, maxLines = 1, modifier = Modifier.weight(1f))
+            // Sin nada en medio, ahí va la pastilla de la guía (si navegas).
+            val guide = LocalGuidePill.current
+            if (header == null && guide == null) Label(title, Typography.title, maxLines = 1, modifier = Modifier.weight(1f))
+            else if (header == null) {
+                Label(title, Typography.title, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                Box(Modifier.weight(1f).padding(horizontal = 16.dp), contentAlignment = Alignment.Center) { guide?.invoke() }
+            } else {
+                Label(title, Typography.title, maxLines = 1)
+                Box(Modifier.weight(1f).padding(horizontal = 16.dp), contentAlignment = Alignment.Center) { header() }
+            }
             IconButton(Icons.close, close, background = c.surfaceHigh)
         }
         content()
@@ -83,18 +125,24 @@ fun DrawerPanel(d: Dependencies, apps: List<App>, close: () -> Unit) {
     var query by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf<App?>(null) }
     var showHidden by remember { mutableStateOf(false) }
+    // «Elegir»: el toque marca la app en vez de abrirla (lo mismo que dejarla presionada, que falla en pantallas de auto).
+    var choosing by remember { mutableStateOf(false) }
     var noRoom by remember { mutableStateOf(false) }
-    // Sin dock propio se ven las sugeridas: fijar parte de ellas (no de cero).
-    val dock = d.prefs.dock ?: remember(apps) { dockFavorites(d, apps).map { it.key } }
+    // Sin favoritas propias se ven las sugeridas: agregar o quitar parte de ellas (no de cero).
+    val dock = rememberFavorites(d, apps).map { it.key }
     val hidden = d.prefs.hidden
     val visible = remember(apps, hidden, showHidden) { if (showHidden) apps else apps.filter { it.key !in hidden } }
-    PanelScaffold(stringResource(R.string.apps), close) {
-        TextInput(query, { query = it }, stringResource(R.string.search_app), Modifier.fillMaxWidth().widthIn(max = 640.dp), icon = true)
+    PanelScaffold(stringResource(R.string.apps), close, header = { PanelSearch(query) { query = it } }) {
         val app = selected
-        if (noRoom) Label(stringResource(R.string.no_room), Typography.body, c.danger, modifier = Modifier.padding(top = 10.dp, start = 8.dp))
+        if (noRoom) Label(stringResource(R.string.no_room), Typography.body, c.danger, modifier = Modifier.padding(start = 8.dp))
         if (app == null) {
-            Row(Modifier.fillMaxWidth().padding(top = 10.dp, start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Label(stringResource(R.string.drawer_help), Typography.small, c.textMuted, modifier = Modifier.weight(1f))
+                Label(
+                    stringResource(if (choosing) R.string.done else R.string.source_choose),
+                    Typography.small, c.accent,
+                    modifier = Modifier.clickable { choosing = !choosing }.padding(8.dp),
+                )
                 if (hidden.isNotEmpty()) {
                     Label(
                         stringResource(if (showHidden) R.string.hide_hidden else R.string.show_hidden, hidden.size),
@@ -104,7 +152,7 @@ fun DrawerPanel(d: Dependencies, apps: List<App>, close: () -> Unit) {
                 }
             }
         } else {
-            // Acciones de la app que se dejó presionada.
+            // Acciones de la app que se dejó presionada (o se tocó con «Elegir»).
             FlowRow(
                 Modifier.fillMaxWidth().padding(top = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -114,6 +162,8 @@ fun DrawerPanel(d: Dependencies, apps: List<App>, close: () -> Unit) {
                 val inDock = app.key in dock
                 Button(stringResource(if (inDock) R.string.unpin_from_dock else R.string.pin_to_dock), {
                     d.prefs.dock = if (inDock) dock - app.key else dock + app.key
+                    // Sin el bloque de favoritas en la barra, la app no se vería en ningún lado.
+                    if (!inDock && BarItem.FAVORITES !in d.prefs.barItems) d.prefs.barItems = BarItem.add(d.prefs.barItems, BarItem.FAVORITES)
                     selected = null
                 })
                 Button(stringResource(R.string.add_to_home), {
@@ -126,9 +176,7 @@ fun DrawerPanel(d: Dependencies, apps: List<App>, close: () -> Unit) {
                     selected = null
                 })
                 Button(stringResource(R.string.app_info), {
-                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:${app.pkg}".toUri())
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    runCatching { context.startActivity(intent) }
+                    openSystemScreen(context, appSettingsIntent(context, Settings.ACTION_APPLICATION_DETAILS_SETTINGS, app.pkg))
                     selected = null
                 })
                 IconButton(Icons.close, { selected = null }, size = 48.dp, background = c.surfaceHigh)
@@ -136,7 +184,7 @@ fun DrawerPanel(d: Dependencies, apps: List<App>, close: () -> Unit) {
         }
         AppGrid(
             d.apps, visible, query,
-            onClick = { d.apps.open(context, it); close() },
+            onClick = { if (choosing) selected = it else { d.apps.open(context, it); close() } },
             onLongPress = { selected = it },
             marked = setOfNotNull(selected?.key),
             modifier = Modifier.weight(1f).padding(top = 8.dp),
@@ -149,15 +197,19 @@ fun PickAppPanel(d: Dependencies, apps: List<App>, tileId: String?, close: () ->
     val dashboard = d.dashboard
     var query by remember { mutableStateOf("") }
     var noRoom by remember { mutableStateOf(false) }
-    PanelScaffold(stringResource(R.string.pick_app), close) {
-        TextInput(query, { query = it }, stringResource(R.string.search_app), Modifier.fillMaxWidth().widthIn(max = 640.dp), icon = true)
-        if (noRoom) Label(stringResource(R.string.no_room), Typography.body, LocalColors.current.danger, modifier = Modifier.padding(top = 10.dp, start = 8.dp))
+    PanelScaffold(stringResource(R.string.pick_app), close, header = { PanelSearch(query) { query = it } }) {
+        if (noRoom) Label(stringResource(R.string.no_room), Typography.body, LocalColors.current.danger, modifier = Modifier.padding(start = 8.dp))
         AppGrid(
             d.apps, apps, query,
             onClick = { app ->
-                if (tileId != null) {
+                val tile = tileId?.let(dashboard::tile)
+                if (tile?.type == TileTypes.PHONE) {
+                    // Teléfono: tu app de llamadas para toda la app (también la barra y el volante).
+                    d.prefs.phoneApp = app.key
+                    close()
+                } else if (tileId != null) {
                     // La app nueva, sin perder las opciones del widget.
-                    dashboard.setData(tileId, withAppKey(dashboard.tiles.firstOrNull { it.id == tileId }?.data ?: "", app.key))
+                    dashboard.setData(tileId, withAppKey(tile?.data ?: "", app.key))
                     close()
                 } else if (dashboard.addTile(TileTypes.APP, app.key)) {
                     close()
@@ -185,7 +237,7 @@ fun PickGaugePanel(d: Dependencies, tileId: String?, close: () -> Unit) {
         CardGrid(GaugeSpecs, minWidth = 200.dp, height = 120.dp, onClick = { spec ->
             if (tileId != null) {
                 // Cambia el dato y se queda con su estilo.
-                val old = d.dashboard.tiles.firstOrNull { it.id == tileId }?.data ?: ""
+                val old = d.dashboard.tile(tileId)?.data ?: ""
                 d.dashboard.setData(tileId, GaugeLook.parse(old).encode(spec.signal))
                 close()
             } else if (d.dashboard.addTile(TileTypes.GAUGE, spec.signal)) close()
@@ -212,16 +264,25 @@ private fun <T> ColumnScope.CardGrid(
     onClick: (T) -> Unit,
     content: @Composable ColumnScope.(T) -> Unit,
 ) {
-    BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
-        val gap = 14.dp
-        val width = columnWidth(maxWidth, minWidth, gap)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(gap), verticalArrangement = Arrangement.spacedBy(gap)) {
+    ScrollingColumns(minWidth, 14.dp) { width ->
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             for (item in items) {
                 Card(Modifier.width(width).height(height), onClick = { onClick(item) }) {
                     Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content(item) }
                 }
             }
         }
+    }
+}
+
+/**
+ * Lo que queda del panel, con scroll si no cabe; [content] recibe el ancho de cada tarjeta para que quepan
+ * tantas columnas de [minWidth] o más como se pueda ([columnWidth]), separadas por [gap].
+ */
+@Composable
+private fun ColumnScope.ScrollingColumns(minWidth: Dp, gap: Dp, content: @Composable (width: Dp) -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
+        content(columnWidth(maxWidth, minWidth, gap))
     }
 }
 
@@ -257,15 +318,14 @@ fun AddTilePanel(d: Dependencies, close: () -> Unit, onPickApp: () -> Unit, onPi
     }
     PanelScaffold(stringResource(R.string.add_tile), close) {
         if (noRoom) Label(stringResource(R.string.no_room), Typography.body, c.danger, modifier = Modifier.padding(bottom = 12.dp))
-        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
-            val gap = 12.dp
-            val width = columnWidth(maxWidth, 240.dp, gap)
+        val gap = 12.dp
+        ScrollingColumns(240.dp, gap) { width ->
             Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
                 for (group in AddGroup.entries) {
                     val specs = group.types.mapNotNull { t -> TileSpecs.firstOrNull { it.type == t } }.filter { offered(d, it.type) }
                     if (specs.isEmpty()) continue
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Label(stringResource(group.title).uppercase(), Typography.label, c.textMuted, modifier = Modifier.padding(start = 4.dp))
+                        Label(stringResource(group.title).uppercase(currentLocale()), Typography.label, c.textMuted, modifier = Modifier.padding(start = 4.dp))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(gap), verticalArrangement = Arrangement.spacedBy(gap)) {
                             for (spec in specs) AddCard(spec, Modifier.width(width)) { add(spec.type) }
                         }
@@ -287,7 +347,8 @@ private fun AddCard(spec: TileSpec, modifier: Modifier, onClick: () -> Unit) {
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Label(stringResource(spec.name), Typography.subtitle, maxLines = 1)
-                spec.detail?.let { Label(stringResource(it), Typography.small, c.textMuted, maxLines = 2) }
+                // Tres renglones: caben en la tarjeta y en pantallas de pie o idiomas largos dos no alcanzaban (Radio).
+                spec.detail?.let { Label(stringResource(it), Typography.small, c.textMuted, maxLines = 3) }
             }
         }
     }
@@ -297,7 +358,7 @@ private fun AddCard(spec: TileSpec, modifier: Modifier, onClick: () -> Unit) {
  * El ancho de cada tarjeta para que quepan tantas columnas de [min] o más (dos como mínimo) en [total].
  * Medio punto menos: con la interfaz escalada, el redondeo a píxeles dejaba fuera la última.
  */
-private fun columnWidth(total: Dp, min: Dp, gap: Dp): Dp {
+internal fun columnWidth(total: Dp, min: Dp, gap: Dp): Dp {
     val columns = ((total + gap) / (min + gap)).toInt().coerceAtLeast(2)
     return (total - gap * (columns - 1)) / columns - 0.5.dp
 }
@@ -319,4 +380,10 @@ internal fun iconOf(type: String) = when (type) {
     TileTypes.PROJECTION -> Icons.phoneCar
     TileTypes.TIRES -> Icons.tire
     else -> Icons.apps
+}
+
+/** Buscador de apps en la cabecera de un panel: píldora baja y hasta 420 dp, centrada entre el título y la ✕. */
+@Composable
+private fun PanelSearch(query: String, onChange: (String) -> Unit) {
+    TextInput(query, onChange, stringResource(R.string.search_app), Modifier.widthIn(max = 420.dp).fillMaxWidth(), icon = true, compact = true)
 }

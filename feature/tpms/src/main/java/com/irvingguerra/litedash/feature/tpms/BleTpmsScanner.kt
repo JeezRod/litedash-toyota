@@ -1,6 +1,5 @@
 package com.irvingguerra.litedash.feature.tpms
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
@@ -8,13 +7,12 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
-import android.content.pm.PackageManager
-import android.location.LocationManager
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.runtime.mutableStateListOf
+import com.irvingguerra.litedash.core.vehicle.bleLocationOff
+import com.irvingguerra.litedash.core.vehicle.canScanBle
 
 /** Por qué no se puede escuchar a los tapones Bluetooth (la app lo dice en su idioma). */
 enum class BleProblem { NO_PERMISSION, BLUETOOTH_OFF, LOCATION_OFF, UNSUPPORTED, FAILED }
@@ -51,16 +49,10 @@ class BleTpmsScanner(
     private val main = Handler(Looper.getMainLooper())
     private var scanner: BluetoothLeScanner? = null
     private var balanced = false
-    private val starts = ArrayDeque<Long>()
+    private val limiter = StartLimiter(SystemClock::elapsedRealtime)
     private var pendingRestart: Runnable? = null
     /** Alguien pidió escuchar (aunque el arranque esté aplazado). */
     private var wanted = false
-
-    /** El permiso que hay que pedir: "dispositivos cercanos" desde Android 12, ubicación antes. */
-    fun permission(): String =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Manifest.permission.BLUETOOTH_SCAN else Manifest.permission.ACCESS_FINE_LOCATION
-
-    fun hasPermission() = context.checkSelfPermission(permission()) == PackageManager.PERMISSION_GRANTED
 
     private val callback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) = handle(result)
@@ -69,8 +61,10 @@ class BleTpmsScanner(
 
         override fun onScanFailed(errorCode: Int) {
             scanner = null
-            wanted = false
             onFailure?.invoke(BleProblem.FAILED)
+            // Sin Bluetooth LE no hay nada que reintentar; si no (registro fallido, demasiados arranques…),
+            // se vuelve a intentar al pasar la ventana del límite de Android, sin dejar de avisar.
+            if (errorCode == ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED) wanted = false else scheduleRestart()
         }
     }
 
@@ -78,28 +72,28 @@ class BleTpmsScanner(
     var onFailure: ((BleProblem) -> Unit)? = null
 
     /** Empieza (o cambia de modo); null = ya escucha, o el problema que lo impide. Hilo principal. */
-    @SuppressLint("MissingPermission") // hasPermission() se revisa antes
+    @SuppressLint("MissingPermission") // canScanBle() se revisa antes
     fun start(balanced: Boolean): BleProblem? {
-        if (!hasPermission()) return BleProblem.NO_PERMISSION
+        if (!canScanBle(context)) return BleProblem.NO_PERMISSION
         val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return BleProblem.UNSUPPORTED
         if (!adapter.isEnabled) return BleProblem.BLUETOOTH_OFF
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && !locationOn()) return BleProblem.LOCATION_OFF
+        if (bleLocationOff(context)) return BleProblem.LOCATION_OFF
         val le = adapter.bluetoothLeScanner ?: return BleProblem.BLUETOOTH_OFF
         wanted = true
         if (scanner != null && this.balanced == balanced) return null
         this.balanced = balanced
         if (scanner != null) {
             // Ya busca en el otro modo: cambiarlo solo si cabe en el límite de Android.
-            if (!canStart()) return run { scheduleRestart(); null }
+            if (!limiter.canStart()) return run { scheduleRestart(); null }
             stopNow()
         }
-        if (!canStart()) return run { scheduleRestart(); null }
+        if (!limiter.canStart()) return run { scheduleRestart(); null }
         return startNow(le)
     }
 
     @SuppressLint("MissingPermission")
     private fun startNow(le: BluetoothLeScanner): BleProblem? {
-        starts.addLast(SystemClock.elapsedRealtime())
+        limiter.started()
         val mode = if (balanced) ScanSettings.SCAN_MODE_BALANCED else ScanSettings.SCAN_MODE_LOW_POWER
         return runCatching {
             le.startScan(null, ScanSettings.Builder().setScanMode(mode).build(), callback)
@@ -108,22 +102,15 @@ class BleTpmsScanner(
         }.getOrElse { BleProblem.FAILED }
     }
 
-    /** Máximo 4 arranques en 30 s (deja uno de margen al límite de Android). */
-    private fun canStart(): Boolean {
-        val now = SystemClock.elapsedRealtime()
-        while (starts.isNotEmpty() && now - starts.first() > WINDOW_MS) starts.removeFirst()
-        return starts.size < MAX_STARTS
-    }
-
     private fun scheduleRestart() {
         if (pendingRestart != null) return
-        val wait = WINDOW_MS - (SystemClock.elapsedRealtime() - starts.first()) + 500
+        val wait = limiter.waitMs()
         val r = Runnable {
             pendingRestart = null
             if (wanted) { stopNow(); start(balanced)?.let { onFailure?.invoke(it) } }
         }
         pendingRestart = r
-        main.postDelayed(r, wait.coerceAtLeast(500))
+        main.postDelayed(r, wait)
     }
 
     fun stop() {
@@ -165,16 +152,7 @@ class BleTpmsScanner(
         while (unknown.size > MAX_UNKNOWN) unknown.removeAt(0)
     }
 
-    private fun locationOn(): Boolean {
-        val m = context.getSystemService(LocationManager::class.java) ?: return true
-        return runCatching {
-            m.isProviderEnabled(LocationManager.GPS_PROVIDER) || m.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-        }.getOrDefault(true)
-    }
-
     companion object {
-        private const val WINDOW_MS = 30_000L
-        private const val MAX_STARTS = 4
         private const val MAX_UNKNOWN = 60
         private const val BASE_SUFFIX = "-0000-1000-8000-00805f9b34fb"
 
@@ -183,5 +161,35 @@ class BleTpmsScanner(
             val u = uuid.lowercase()
             return if (u.startsWith("0000") && u.endsWith(BASE_SUFFIX)) u.substring(4, 8) else u
         }
+    }
+}
+
+/**
+ * Android bloquea a quien llama `startScan` más de ~5 veces en 30 s: aquí máximo 4 (uno de margen).
+ * [clock] = milisegundos desde el arranque.
+ */
+internal class StartLimiter(private val clock: () -> Long) {
+    private val starts = ArrayDeque<Long>()
+
+    fun canStart(): Boolean {
+        val now = clock()
+        while (starts.isNotEmpty() && now - starts.first() > WINDOW_MS) starts.removeFirst()
+        return starts.size < MAX_STARTS
+    }
+
+    fun started() {
+        starts.addLast(clock())
+    }
+
+    /** Cuánto esperar para que vuelva a caber un arranque (al menos medio segundo). */
+    fun waitMs(): Long {
+        val oldest = starts.firstOrNull() ?: return MIN_WAIT_MS
+        return (WINDOW_MS - (clock() - oldest) + MIN_WAIT_MS).coerceAtLeast(MIN_WAIT_MS)
+    }
+
+    companion object {
+        const val WINDOW_MS = 30_000L
+        const val MAX_STARTS = 4
+        private const val MIN_WAIT_MS = 500L
     }
 }

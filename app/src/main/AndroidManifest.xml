@@ -11,19 +11,50 @@
         <intent>
             <action android:name="android.intent.action.ASSIST" />
         </intent>
-        <!-- Para saber si la pantalla trae galería o "Archivos" antes de pedir una imagen (si no, el explorador propio). -->
-        <intent>
-            <action android:name="android.intent.action.OPEN_DOCUMENT" />
-            <data android:mimeType="image/*" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.GET_CONTENT" />
-            <data android:mimeType="image/*" />
-        </intent>
         <!-- Qué launchers hay y cuál es el predeterminado (solo para los reportes). -->
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.HOME" />
+        </intent>
+        <!-- Apps de navegación instaladas (Ajustes → Apps → Navegación): las que abren una dirección o son de mapas. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.APP_MAPS" />
+        </intent>
+        <!-- Atajos a Ajustes de Android (Sistema): solo los que la pantalla tiene. -->
+        <intent>
+            <action android:name="android.settings.SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.BLUETOOTH_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.WIFI_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.LOCATION_SOURCE_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.DISPLAY_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.SOUND_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.APPLICATION_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.DATE_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.LOCALE_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.HOME_SETTINGS" />
         </intent>
     </queries>
 
@@ -31,6 +62,8 @@
          Android 10, poder ponerse al frente sola ("Mostrar sobre otras apps", lo da el usuario). -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Regresar al inicio tras abrir encima una app de música o de fábrica (permiso normal, sin pregunta). -->
+    <uses-permission android:name="android.permission.REORDER_TASKS" />
     <!-- Catálogo de autos, actualizaciones (GitHub), clima, mapa, radio por internet, carátulas,
          estadísticas anónimas (apagables), "Enviar un reporte" y el escáner OBD por Wi-Fi. -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -43,6 +76,9 @@
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
     <!-- Escáner OBD por cable USB (opcional: también va por Bluetooth o Wi-Fi). -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <!-- «Hacer visible esta pantalla» (Vincular celular) en Android 12+: abre la ventana de Android de 5 minutos.
+         Solo existe desde Android 12 y nunca tiene que ver con la ubicación (no lleva maxSdkVersion ni neverForLocation). -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <!-- Brillo de día y noche en todas las apps: solo si lo activas (Android lo pide aparte). -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
 
@@ -62,6 +98,18 @@
 
         <!-- Para medir con Macrobenchmark y adb en compilaciones release/benchmark. -->
         <profileable android:shell="true" tools:targetApi="29" />
+
+        <!-- Sin EmojiCompat (lo trae Compose): LiteDash no usa emoji de compatibilidad y así no busca la fuente de
+             emoji en cada arranque. Los demás inicializadores de androidx.startup se quedan. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+                tools:node="remove" />
+        </provider>
 
         <!-- El auto solo, para la mitad de la pantalla dividida (en su propia tarea: el inicio no puede ser una mitad). -->
         <activity
@@ -116,6 +164,8 @@
                 <action android:name="com.glsx.boot.ACCON" />
                 <action android:name="com.cayboy.action.ACC_ON" />
                 <action android:name="com.carboy.action.ACC_ON" />
+                <action android:name="com.qf.action.ACC_ON" />
+                <action android:name="autochips.intent.action.QB_POWERON" />
             </intent-filter>
         </receiver>
 
@@ -133,6 +183,13 @@
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Lugares compartidos desde otras apps (WhatsApp, un navegador…): el mapa de LiteDash los enseña. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geo" />
             </intent-filter>
         </activity>
     </application>

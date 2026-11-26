@@ -1,5 +1,6 @@
 package com.irvingguerra.litedash.feature.tpms
 
+import com.irvingguerra.litedash.core.vehicle.KPA_PER_PSI
 import com.irvingguerra.litedash.core.vehicle.Source
 
 /** Una llanta del auto; [key] se guarda en preferencias y en el bus (no se traduce). */
@@ -16,9 +17,10 @@ enum class Wheel(val key: String) {
 }
 
 /**
- * Lo último que dijo un sensor. [pressureKpa] es manométrica (0 = ponchada), ya con el
- * ajuste de calibración del usuario cuando sale del repositorio. [reportedWheel] = la
- * llanta que dice el propio sensor o receptor (null si no lo sabe).
+ * Lo último que dijo un sensor. [pressureKpa] es manométrica (0 = ponchada): tal como llega
+ * dentro del repositorio, y con el ajuste de calibración de su sensor en lo que el repositorio
+ * entrega (`wheelReading`, `nearby`). [reportedWheel] = la llanta que dice el propio sensor o
+ * receptor (null si no lo sabe). [batteryVolts] solo va al reporte (la pila baja ya viene en [lowBattery]).
  */
 data class TireReading(
     val sensorId: String,
@@ -35,6 +37,12 @@ data class TireReading(
     val atMillis: Long,
 )
 
+/** El "sensor" de [w] cuando las llantas salen de la computadora del auto. */
+internal fun obdSensorId(w: Wheel) = "obd-" + w.key
+
+/** El sensor de [w] del receptor USB mientras no diga su id real. */
+internal fun usbSensorId(w: Wheel) = "usb-" + w.key
+
 /** Señales de llantas en el bus del auto ("tire_pressure_fl" en kPa, "tire_temp_fl" en °C). */
 object TireSignals {
     fun pressure(w: Wheel) = "tire_pressure_${w.key}"
@@ -46,12 +54,10 @@ object TireSignals {
 }
 
 /**
- * Fuente con la que se publican las llantas. No se agrega `Source.TPMS`: la app tiene un
- * `when` exhaustivo sobre [Source] (Gauges.kt) que dejaría de compilar. Ninguna otra fuente
- * publica señales de llantas, así que la prioridad no importa; y nunca se usa
+ * Fuente con la que se publican las llantas (ninguna otra publica señales de llantas). Nunca se usa
  * `bus.clear(...)` con ella: se borran solo las señales de llantas, una por una.
  */
-internal val TPMS_SOURCE = Source.CAN
+internal val TPMS_SOURCE = Source.TPMS
 
 /** Unidad de presión que se muestra (internamente todo va en kPa). */
 enum class PressureUnit(val key: String, val label: String) {
@@ -79,8 +85,6 @@ enum class PressureUnit(val key: String, val label: String) {
         fun fromKey(key: String?): PressureUnit? = entries.firstOrNull { it.key == key }
     }
 }
-
-const val KPA_PER_PSI = 6.894757f
 
 internal fun ByteArray.hex(from: Int = 0, to: Int = size): String =
     (from until to).joinToString("") { "%02X".format(this[it].toInt() and 0xFF) }

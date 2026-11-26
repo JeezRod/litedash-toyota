@@ -1,5 +1,10 @@
 package com.irvingguerra.litedash
 
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.key
+import androidx.compose.ui.unit.DpSize
+import com.irvingguerra.litedash.core.ui.contentColors
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -39,6 +45,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -49,21 +57,28 @@ import com.irvingguerra.litedash.core.ui.Icon
 import com.irvingguerra.litedash.core.ui.IconButton
 import com.irvingguerra.litedash.core.ui.Icons
 import com.irvingguerra.litedash.core.ui.Label
+import com.irvingguerra.litedash.core.ui.LocalCardLook
 import com.irvingguerra.litedash.core.ui.LocalColors
 import com.irvingguerra.litedash.core.ui.Radius
 import com.irvingguerra.litedash.core.ui.Typography
+import com.irvingguerra.litedash.core.ui.skinSurface
 import com.irvingguerra.litedash.feature.apps.App
 import com.irvingguerra.litedash.feature.apps.AppIcon
 import com.irvingguerra.litedash.feature.apps.AppRepository
 import com.irvingguerra.litedash.feature.dashboard.longPress
+import com.irvingguerra.litedash.feature.map.ROUTE_BLUE
 
 /** Lo que hacen los botones de la barra (los arma el inicio). */
 class BarActions(
+    /** De vuelta al tablero: cierra lo que haya en grande o abierto. */
+    val onHome: () -> Unit,
     val onApps: () -> Unit,
     val onMusic: () -> Unit,
     val onNavigate: () -> Unit,
     /** La app de Bluetooth del estéreo (o el emparejado): para conectar el celular sin buscarla. */
     val onBluetooth: () -> Unit,
+    /** Tu app de Android Auto / CarPlay (o sus ajustes, si no hay ninguna). */
+    val onProjection: () -> Unit,
     val onPhone: () -> Unit,
     /** El asistente de voz de la pantalla; null si no trae (el botón no aparece ni se ofrece). */
     val onVoice: (() -> Unit)?,
@@ -91,6 +106,8 @@ fun AppBar(
     actions: BarActions,
     /** El mapa de LiteDash en grande: su botón va marcado (otro toque lo cierra). */
     mapOpen: Boolean = false,
+    /** Con la guía de LiteDash: el botón de navegar lleva un punto. */
+    guiding: Boolean = false,
 ) {
     val c = LocalColors.current
     val k = prefs.barSize.scale
@@ -103,7 +120,10 @@ fun AppBar(
         box = (if (small) 68.dp else if (short) 46.dp else 56.dp) * k,
     )
     val items = prefs.barItems.filter { it != BarItem.VOICE || actions.onVoice != null }
-    val item = @Composable { it: BarItem -> BarButton(it, sizes, vertical, musicOpen, mapOpen, actions) }
+    // Lo de adentro, con los colores que le tocan sobre la piel (de vidrio, sin grises opacos).
+    val look = LocalCardLook.current
+    val inner = remember(c, look.style, vertical) { if (vertical) c else contentColors(c, look, plain = false) }
+    val item = @Composable { it: BarItem -> CompositionLocalProvider(LocalColors provides inner) { BarButton(it, sizes, vertical, musicOpen, mapOpen, actions, guiding) } }
     val favoritesBlock = @Composable { maxApps: Int? ->
         val shown = if (maxApps != null) favorites.take(maxApps) else favorites
         if (vertical) Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -115,9 +135,10 @@ fun AppBar(
     val floating = !vertical && prefs.barStyle == BarStyle.FLOATING
     // Fuera de acomodar, dejarla presionada entra a acomodar (sin quitarle los toques a sus botones).
     val press = if (editing) Modifier else Modifier.longPress(actions.onEdit)
+    val thickness = barThickness(prefs, vertical)
     val shell: Modifier = when {
-        vertical -> Modifier.fillMaxHeight().width((if (small) 76.dp else 88.dp) * k).padding(vertical = 10.dp)
-        else -> Modifier.fillMaxWidth().height((if (small) 96.dp else if (short) 64.dp else 84.dp) * k).padding(horizontal = 16.dp, vertical = 8.dp)
+        vertical -> Modifier.fillMaxHeight().width(thickness).padding(vertical = 10.dp)
+        else -> Modifier.fillMaxWidth().height(thickness).padding(horizontal = 16.dp, vertical = 8.dp)
     }
     Box(shell, contentAlignment = Alignment.Center) {
         val shape = RoundedCornerShape(if (floating) 40.dp else Radius.card)
@@ -125,67 +146,154 @@ fun AppBar(
         val surface = Modifier
             .then(if (vertical || floating) Modifier.fillMaxHeight() else Modifier.fillMaxSize())
             .clip(shape)
-            .background(if (vertical) Color.Transparent else c.surface)
+            // Lisa o de vidrio como las tarjetas; flotando sobre el inicio, nunca tan transparente que no se lea.
+            .then(if (vertical) Modifier else Modifier.skinSurface(LocalCardLook.current, c, shape, floor = BAR_OPACITY))
             .then(if (editing) Modifier.border(1.5.dp, c.accent, shape) else press)
             .padding(horizontal = if (vertical) 0.dp else if (floating || editing) 18.dp else 8.dp)
         if (editing) {
             Box(surface, contentAlignment = Alignment.Center) {
-                EditableBar(prefs, items, vertical, item, favoritesBlock, actions.onBarSettings)
+                EditableBar(prefs, items, vertical, favorites.isEmpty(), item, favoritesBlock, actions.onBarSettings)
             }
             return@Box
         }
-        val split = items.indexOf(BarItem.FAVORITES)
-        val start = if (split >= 0) items.take(split) else items.dropLast(1)
-        val end = if (split >= 0) items.drop(split + 1) else listOf(BarItem.SETTINGS)
-        if (vertical) Column(surface, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            for (i in start) item(i)
-            // Las favoritas que quepan entre los botones de arriba y los de abajo.
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds(), contentAlignment = Alignment.Center) {
-                if (split >= 0) favoritesBlock((maxHeight / (sizes.button + 4.dp)).toInt())
-            }
-            for (i in end) item(i)
-        } else Box(surface, contentAlignment = Alignment.Center) {
+        // Las tres partes, como las dejaron las dos divisiones al acomodar.
+        val first = items.indexOf(BarItem.SPLIT_START)
+        val second = items.indexOf(BarItem.SPLIT_END)
+        val start = items.subList(0, first)
+        val middle = items.subList(first + 1, second)
+        val end = items.subList(second + 1, items.size)
+        // Los que no quepan se recortan; Ajustes (al final) nunca: sin él no habría cómo salir del inicio.
+        val group = @Composable { list: List<BarItem> ->
+            if (vertical) Column(Modifier.clipToBounds(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) { for (i in list) item(i) }
+            else Row(Modifier.clipToBounds(), verticalAlignment = Alignment.CenterVertically) { for (i in list) item(i) }
+        }
+        Box(surface, contentAlignment = Alignment.Center) {
             DockLayout(
+                vertical = vertical,
                 wrap = floating,
-                start = { Row(verticalAlignment = Alignment.CenterVertically) { for (i in start) item(i) } },
+                start = { group(start) },
                 center = {
-                    // Caben las que quepan: en pantallas chicas no se encima.
+                    // De tus favoritas caben las que quepan junto a los botones del centro: en pantallas chicas no se encima.
                     BoxWithConstraints(contentAlignment = Alignment.Center) {
-                        if (split >= 0) favoritesBlock((maxWidth / (sizes.box + 8.dp)).toInt())
+                        val buttons = middle.count { it != BarItem.FAVORITES }
+                        val apps = (if (vertical) (maxHeight - (sizes.button + 4.dp) * buttons) / (sizes.button + 4.dp) else (maxWidth - sizes.button * buttons) / (sizes.box + 8.dp)).toInt().coerceAtLeast(0)
+                        val parts = @Composable { for (i in middle) if (i == BarItem.FAVORITES) favoritesBlock(apps) else item(i) }
+                        if (vertical) Column(Modifier.clipToBounds(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) { parts() }
+                        else Row(Modifier.clipToBounds(), verticalAlignment = Alignment.CenterVertically) { parts() }
                     }
                 },
-                end = { Row(verticalAlignment = Alignment.CenterVertically) { for (i in end) item(i) } },
+                end = { group(end) },
             )
         }
     }
 }
+
+/**
+ * La barra en sus ajustes, acostada y con sus botones sin efecto: un toque elige un botón, una raya o tus favoritas
+ * ([selected], marcado) y quien la pone lo mueve o lo quita con sus flechas. Sin dejar presionado ni arrastrar: en
+ * muchas pantallas de auto ese gesto falla. [items] = lo que se ve, en orden; Ajustes va al final y no se elige.
+ */
+@Composable
+internal fun BarPreview(repo: AppRepository, favorites: List<App>, items: List<BarItem>, selected: BarItem?, onSelect: (BarItem) -> Unit) {
+    val c = LocalColors.current
+    val sizes = BarSizes(button = 48.dp, icon = 36.dp)
+    val actions = remember { BarActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}) }
+    val shape = RoundedCornerShape(Radius.card)
+    val mark = RoundedCornerShape(Radius.inner)
+    // Lo elegido (también lo recién agregado o movido) se trae a la vista, al centro si se puede, sin animar.
+    val scroll = rememberScrollState()
+    val spans = remember { mutableStateMapOf<BarItem, IntRange>() }
+    val span = selected?.let { spans[it] }
+    LaunchedEffect(span, scroll.viewportSize, scroll.maxValue) {
+        if (span != null && scroll.viewportSize > 0) scroll.scrollTo(centeredScroll(span, scroll.viewportSize, scroll.maxValue))
+    }
+    Row(
+        Modifier.fillMaxWidth().height(76.dp).clip(shape).background(c.surfaceHigh).border(1.dp, c.line, shape)
+            .horizontalScroll(scroll).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+    ) {
+        for (i in items) key(i) {
+            val chosen = i == selected
+            Box(
+                Modifier
+                    .onPlaced { val x = it.positionInParent().x.toInt(); spans[i] = x until x + it.size.width }
+                    .clip(mark)
+                    .then(if (chosen) Modifier.background(c.accent.copy(alpha = 0.18f)).border(1.5.dp, c.accent, mark) else Modifier)
+                    .then(if (i != BarItem.SETTINGS) Modifier.clickable { onSelect(i) } else Modifier)
+                    .padding(2.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                when {
+                    i.isSplit -> SplitHandle(vertical = false)
+                    i == BarItem.FAVORITES -> FavoritesEdit(favorites.isEmpty(), vertical = false) { max ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            for (app in if (max != null) favorites.take(max) else favorites) AppIcon(repo, app, sizes.icon)
+                        }
+                    }
+                    // El volumen, solo su ícono: el de verdad escucha al sistema y busca la familia de la pantalla.
+                    i == BarItem.VOLUME -> Box(Modifier.size(sizes.button), contentAlignment = Alignment.Center) { Icon(Icons.volume, c.text, sizes.button * 0.45f) }
+                    else -> BarButton(i, sizes, vertical = false, musicOpen = false, mapOpen = false, actions)
+                }
+                // Encima, para que el toque elija (y no mueva el volumen ni abra nada).
+                Box(Modifier.matchParentSize().pointerInput(Unit) {})
+            }
+        }
+    }
+}
+
+/** Dónde dejar el desplazamiento para que [span] (en el contenido) quede al centro de [viewport], sin pasarse de [max]. */
+internal fun centeredScroll(span: IntRange, viewport: Int, max: Int): Int =
+    ((span.first + span.last) / 2 - viewport / 2).coerceIn(0, max.coerceAtLeast(0))
+
+/** Lo que ocupa la barra: su ancho al lado ([vertical]) o su alto abajo. Oculta, el inicio lo descuenta de la cuadrícula. */
+@Composable
+fun barThickness(prefs: Preferences, vertical: Boolean): Dp {
+    val short = isShortScreen()
+    val small = isSmallScreen() && !short
+    return (if (vertical) (if (small) 76.dp else 88.dp) else if (small) 96.dp else if (short) 64.dp else 84.dp) * prefs.barSize.scale
+}
+
+/** De vidrio, lo menos que se ve la barra de abajo. */
+private const val BAR_OPACITY = 0.55f
+
+/** El punto del botón de navegar mientras hay guía. */
+private val GUIDE_DOT = 8.dp
 
 /** Medidas de la barra: botón, ícono de app y caja de cada favorita (abajo) o del volumen (al lado). */
 private data class BarSizes(val button: Dp, val icon: Dp, val box: Dp = button, val volume: Dp = button)
 
 /** Un botón de la barra. Las favoritas no pasan por aquí: van en su propio bloque. */
 @Composable
-private fun BarButton(item: BarItem, sizes: BarSizes, vertical: Boolean, musicOpen: Boolean, mapOpen: Boolean, actions: BarActions) {
+private fun BarButton(item: BarItem, sizes: BarSizes, vertical: Boolean, musicOpen: Boolean, mapOpen: Boolean, actions: BarActions, guiding: Boolean = false) {
     val c = LocalColors.current
+    // Su nombre, para el lector de pantalla (el mismo que en Ajustes → Barra).
+    val label = item.title()?.let { stringResource(it) }
     when (item) {
-        BarItem.APPS -> IconButton(Icons.apps, actions.onApps, size = sizes.button)
+        BarItem.HOME -> IconButton(Icons.home, actions.onHome, size = sizes.button, label = label)
+        BarItem.APPS -> IconButton(Icons.apps, actions.onApps, size = sizes.button, label = label)
         // La pantalla Música (como en Tesla); marcado mientras está abierta.
-        BarItem.MUSIC -> IconButton(Icons.music, actions.onMusic, size = sizes.button, background = if (musicOpen) c.surfaceHigh else Color.Transparent)
+        BarItem.MUSIC -> IconButton(Icons.music, actions.onMusic, size = sizes.button, background = if (musicOpen) c.surfaceHigh else Color.Transparent, label = label)
         BarItem.VOLUME -> Volume(if (vertical) sizes.volume else sizes.button, vertical = vertical)
         BarItem.MUTE -> Mute(sizes.button)
-        BarItem.NAVIGATE -> IconButton(Icons.navigate, actions.onNavigate, size = sizes.button, background = if (mapOpen) c.surfaceHigh else Color.Transparent)
-        BarItem.BLUETOOTH -> IconButton(Icons.bluetooth, actions.onBluetooth, size = sizes.button)
-        BarItem.PHONE -> IconButton(Icons.phone, actions.onPhone, size = sizes.button)
-        BarItem.VOICE -> actions.onVoice?.let { IconButton(Icons.mic, it, size = sizes.button) }
+        BarItem.NAVIGATE -> Box {
+            IconButton(Icons.navigate, actions.onNavigate, size = sizes.button, background = if (mapOpen) c.surfaceHigh else Color.Transparent, label = label)
+            // Navegando con LiteDash: un punto (la guía sigue aunque no se vea).
+            if (guiding) Box(Modifier.align(Alignment.TopEnd).padding(sizes.button * 0.18f).size(GUIDE_DOT).clip(CircleShape).background(ROUTE_BLUE))
+        }
+        BarItem.BLUETOOTH -> IconButton(Icons.bluetooth, actions.onBluetooth, size = sizes.button, label = label)
+        BarItem.PROJECTION -> IconButton(Icons.phoneCar, actions.onProjection, size = sizes.button, label = label)
+        BarItem.PHONE -> IconButton(Icons.phone, actions.onPhone, size = sizes.button, label = label)
+        BarItem.VOICE -> actions.onVoice?.let { IconButton(Icons.mic, it, size = sizes.button, label = label) }
         // Siempre: sin Ajustes no habría cómo salir del inicio.
-        BarItem.SETTINGS -> IconButton(Icons.settings, actions.onSettings, size = sizes.button)
-        BarItem.FAVORITES -> Unit
+        BarItem.SETTINGS -> IconButton(Icons.settings, actions.onSettings, size = sizes.button, label = stringResource(R.string.bar_item_settings))
+        BarItem.FAVORITES, BarItem.SPLIT_START, BarItem.SPLIT_END -> Unit
     }
 }
 
 /**
- * La barra al acomodar: sus botones con ✕; se dejan presionados un momento y se arrastran para cambiar su
- * orden (caen donde se sueltan). Si no caben, se deslizan. Ajustes y "Barra" van fijos al final: siempre se
+ * La barra al acomodar: sus botones con ✕ y sus dos divisiones (las rayas); se dejan presionados un momento y se
+ * arrastran para cambiar su orden o de parte (los demás se recorren al pasarlos). Si no caben, se deslizan. Ajustes y "Barra" van fijos al final: siempre se
  * alcanzan, aunque haya muchos botones o la pantalla sea chica. Se trabaja sobre la lista guardada: lo que
  * no se ve aquí (la voz sin asistente) no se pierde al quitar o mover otro.
  */
@@ -194,49 +302,56 @@ private fun EditableBar(
     prefs: Preferences,
     items: List<BarItem>,
     vertical: Boolean,
+    noFavorites: Boolean,
     item: @Composable (BarItem) -> Unit,
     favoritesBlock: @Composable (Int?) -> Unit,
     onBarSettings: () -> Unit,
 ) {
     val movable = items.filter { it != BarItem.SETTINGS }
-    // Dónde está el centro de cada uno (en la pantalla) y cuánto se ha arrastrado el que se mueve.
+    // Dónde está el centro de cada uno (en la pantalla) y dónde va el dedo con el que se mueve (mismo eje).
     val centers = remember { mutableStateMapOf<BarItem, Float>() }
     var dragging by remember { mutableStateOf<BarItem?>(null) }
-    var offset by remember { mutableFloatStateOf(0f) }
-    fun drop(i: BarItem) {
-        val at = (centers[i] ?: 0f) + offset
-        val others = movable - i
-        // El que queda justo después en la barra; en la lista guardada va antes de él (o antes de Ajustes).
-        val next = others.firstOrNull { (centers[it] ?: 0f) >= at } ?: BarItem.SETTINGS
-        val all = prefs.barItems - i
-        prefs.barItems = all.toMutableList().apply { add(all.indexOf(next).coerceAtLeast(0), i) }
+    var dragAt by remember { mutableFloatStateOf(0f) }
+    val shown by rememberUpdatedState(movable)
+    // Mientras se arrastra, los demás se recorren en cuanto lo pasan (como los widgets del inicio), sin esperar a
+    // soltarlo: se guarda el orden nuevo solo cuando cambia quién le sigue.
+    fun settle(i: BarItem) {
+        val next = (shown - i).firstOrNull { (centers[it] ?: 0f) >= dragAt }
+        if (next != shown.getOrNull(shown.indexOf(i) + 1)) prefs.barItems = reorderBar(prefs.barItems, shown, i, dragAt) { centers[it] ?: 0f }
     }
     val scroll = rememberScrollState()
     val list = @Composable {
-        for (i in movable) {
+        // Con llave: al recorrerse, cada botón conserva su gesto (el arrastre no se corta a medio camino).
+        for (i in movable) key(i) {
             Box(
                 Modifier
                     .onGloballyPositioned { centers[i] = it.boundsInRoot().center.let { p -> if (vertical) p.y else p.x } }
                     .zIndex(if (dragging == i) 1f else 0f)
-                    .graphicsLayer { if (dragging == i) { if (vertical) translationY = offset else translationX = offset } }
-                    .pointerInput(i, movable) {
+                    // Sigue al dedo aunque su lugar en la fila cambie mientras tanto.
+                    .graphicsLayer {
+                        if (dragging == i) (dragAt - (centers[i] ?: dragAt)).let { if (vertical) translationY = it else translationX = it }
+                    }
+                    .pointerInput(i) {
                         detectDragGesturesAfterLongPress(
-                            onDragStart = { dragging = i; offset = 0f },
+                            onDragStart = { dragAt = centers[i] ?: 0f; dragging = i },
                             onDrag = { change, d ->
                                 change.consume()
-                                offset += if (vertical) d.y else d.x
+                                dragAt += if (vertical) d.y else d.x
+                                settle(i)
                             },
-                            onDragEnd = {
-                                drop(i)
-                                dragging = null
-                            },
+                            onDragEnd = { dragging = null },
                             onDragCancel = { dragging = null },
                         )
                     }
                     .padding(top = 6.dp, start = 6.dp),
             ) {
-                if (i == BarItem.FAVORITES) FavoritesEdit(prefs, vertical, favoritesBlock) else item(i)
-                RemoveBadge(Modifier.align(Alignment.TopStart).offset(x = (-6).dp, y = (-6).dp)) { prefs.barItems = prefs.barItems - i }
+                when {
+                    i.isSplit -> SplitHandle(vertical)
+                    i == BarItem.FAVORITES -> FavoritesEdit(empty = noFavorites, vertical, favoritesBlock)
+                    else -> item(i)
+                }
+                // Las divisiones no se quitan: solo se mueven.
+                if (!i.isSplit) RemoveBadge(Modifier.align(Alignment.TopStart).offset(x = (-6).dp, y = (-6).dp)) { prefs.barItems = prefs.barItems - i }
             }
         }
     }
@@ -251,19 +366,43 @@ private fun EditableBar(
     }
 }
 
-/** Las favoritas al acomodar: el bloque entero se mueve; si está vacío, dice cómo agregarlas. */
+/**
+ * Una división de la barra al acomodar: una raya del color de la interfaz que se arrastra como un botón. Lo que
+ * queda antes de la primera va al principio, entre las dos al centro y después de la segunda al final.
+ */
 @Composable
-private fun FavoritesEdit(prefs: Preferences, vertical: Boolean, favoritesBlock: @Composable (Int?) -> Unit) {
+private fun SplitHandle(vertical: Boolean) {
+    val c = LocalColors.current
+    Box(Modifier.size(if (vertical) DpSize(40.dp, 20.dp) else DpSize(20.dp, 40.dp)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(if (vertical) DpSize(32.dp, 4.dp) else DpSize(4.dp, 32.dp)).clip(CircleShape).background(c.accent))
+    }
+}
+
+/** Las favoritas al acomodar: el bloque entero se mueve; sin ninguna ([empty]), una estrella en su lugar. */
+@Composable
+private fun FavoritesEdit(empty: Boolean, vertical: Boolean, favoritesBlock: @Composable (Int?) -> Unit) {
     val c = LocalColors.current
     // Un contorno fino (no una caja de color): se nota que es un bloque que se mueve entero.
     Box(
         Modifier.border(1.dp, c.line, RoundedCornerShape(Radius.inner)).padding(horizontal = if (vertical) 2.dp else 8.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center,
     ) {
-        if (prefs.dock?.isEmpty() == true) Icon(Icons.apps, c.textMuted, 24.dp)
+        // La estrella (no el ícono de «Todas las apps», que es otro botón).
+        if (empty) Icon(Icons.star, c.textMuted, 24.dp)
         // Al acomodar caben menos (los ✕ y "Barra" ocupan lugar): las primeras tres.
         else favoritesBlock(if (vertical) 2 else 3)
     }
+}
+
+/**
+ * La barra [stored] (la guardada) con [moved] soltado en [at] (su centro en la pantalla, por el eje de la barra).
+ * Queda antes del primero de [shown] (los que se ven y se mueven) cuyo centro ([center]) está en [at] o después; si
+ * no hay, antes de Ajustes. Lo que no se ve (la voz sin asistente) conserva su lugar.
+ */
+internal fun reorderBar(stored: List<BarItem>, shown: List<BarItem>, moved: BarItem, at: Float, center: (BarItem) -> Float): List<BarItem> {
+    val next = (shown - moved).firstOrNull { center(it) >= at } ?: BarItem.SETTINGS
+    val all = stored - moved
+    return all.toMutableList().apply { add(all.indexOf(next).coerceAtLeast(0), moved) }
 }
 
 /** El ✕ en la esquina de un botón al acomodar la barra, por fuera del ícono para no taparlo. */
@@ -291,16 +430,31 @@ private fun EditChip(text: String, vertical: Boolean, onClick: () -> Unit) {
 }
 
 /**
- * La barra de abajo en tres partes: [start] pegado a la izquierda, [end] a la derecha y [center] (tus
- * favoritas) al centro de TODA la barra, no del hueco entre los dos (como Tesla). El centro tiene lo que dejan
- * libre los lados por igual. [end] se mide primero (lleva Ajustes: nunca se queda sin lugar) y [start] con
- * lo que sobre. Con [wrap] (flotante) mide solo lo que ocupa, y la píldora queda al centro.
+ * La barra en tres partes: [start] al principio (izquierda o arriba), [end] al final y [center] (tus favoritas) en
+ * medio. [end] se mide primero (lleva Ajustes: nunca se queda sin lugar) y [start] con lo que sobre. Abajo, el centro
+ * va al centro de TODA la barra, no del hueco entre los dos (como Tesla), con lo que dejan libre los lados por igual; con
+ * [wrap] (flotante) mide solo lo que ocupa y la píldora queda al centro. A un lado ([vertical]), el centro llena el
+ * hueco entre los dos.
  */
 @Composable
-private fun DockLayout(wrap: Boolean, start: @Composable () -> Unit, center: @Composable () -> Unit, end: @Composable () -> Unit) {
+private fun DockLayout(vertical: Boolean, wrap: Boolean, start: @Composable () -> Unit, center: @Composable () -> Unit, end: @Composable () -> Unit) {
     Layout(contents = listOf(start, center, end), modifier = (if (wrap) Modifier.fillMaxHeight() else Modifier.fillMaxSize()).clipToBounds()) { (s, m, e), constraints ->
-        val max = constraints.maxWidth
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        if (vertical) {
+            val max = constraints.maxHeight
+            val width = constraints.maxWidth
+            val gap = 4.dp.roundToPx()
+            val endPlaced = e.first().measure(loose)
+            val startPlaced = s.first().measure(loose.copy(maxHeight = (max - endPlaced.height - gap).coerceAtLeast(0)))
+            val room = (max - startPlaced.height - endPlaced.height - 2 * gap).coerceAtLeast(0)
+            val centerPlaced = m.first().measure(loose.copy(minHeight = room, maxHeight = room))
+            return@Layout layout(width, max) {
+                startPlaced.place((width - startPlaced.width) / 2, 0)
+                centerPlaced.place((width - centerPlaced.width) / 2, startPlaced.height + gap)
+                endPlaced.place((width - endPlaced.width) / 2, max - endPlaced.height)
+            }
+        }
+        val max = constraints.maxWidth
         val endPlaced = e.first().measure(loose)
         val startPlaced = s.first().measure(loose.copy(maxWidth = (max - endPlaced.width).coerceAtLeast(0)))
         val gap = 16.dp.roundToPx()

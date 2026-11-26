@@ -26,15 +26,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.irvingguerra.litedash.core.ui.IconButton
 import com.irvingguerra.litedash.core.ui.Icons
 import com.irvingguerra.litedash.core.ui.Label
 import com.irvingguerra.litedash.core.ui.LocalColors
 import com.irvingguerra.litedash.core.ui.Typography
+import java.util.Locale
 
 /**
  * La música en grande, sin salir de LiteDash: arriba de dónde suena (Archivos, Bluetooth o App, uno
@@ -57,7 +65,8 @@ fun MusicExpanded(
     var browsing by remember { mutableStateOf(startBrowsing && files) }
     // Con Archivos, play sin nada que tocar abre la biblioteca.
     OnFilesEmpty(repo, files, remember { { browsing = true } })
-    ExpandedCard(repo, modifier, tint = song) {
+    PhoneOnlySound(repo)
+    ExpandedCard(repo, SoundPiece.MUSIC, modifier, tint = song) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             // Lo que sobra es del selector; los botones, siempre a la derecha.
             Box(Modifier.weight(1f)) { ModePicker(repo) }
@@ -73,11 +82,21 @@ fun MusicExpanded(
         }
         // Sin nada sonando se ve igual, con los controles: play reanuda lo último.
         // Título (~120), barra (~50), botones (~92) y, si la app trae, sus botones propios (~64).
-        val idle = repo.usbDrive?.let { stringResource(R.string.usb_drive_in, it) } ?: stringResource(R.string.resume_explain)
+        val idle = when {
+            repo.phoneOnly -> stringResource(R.string.music_from_phone)
+            else -> repo.usbDrive?.let { stringResource(R.string.usb_drive_in, it) } ?: stringResource(R.string.resume_explain)
+        }
         NowPlaying(
             song, Icons.music,
             detailsHeight = if (song?.actions.isNullOrEmpty()) 262.dp else 326.dp,
-            title = { m, compact -> ExpandedTitle(repo, song, repo.starting, stringResource(R.string.nothing_playing), idle, m, compact) },
+            title = { m, compact ->
+                // Sin ▶: tocar el aviso vuelve a pedir la entrada de audio de la pantalla.
+                val tap = if (song == null && repo.phoneOnly) m.clickable { repo.askBluetoothSound() } else m
+                ExpandedTitle(repo, song, repo.starting, stringResource(R.string.nothing_playing), idle, tap, compact)
+            },
+            // Deslizar solo sobre la carátula: la barra de avance ya se arrastra.
+            onNext = { repo.next() }.takeIf { repo.soundCheckFor(SoundPiece.MUSIC) == null },
+            onPrevious = { repo.previous() },
         ) { PlayerControls(repo, song, it) }
     }
 }
@@ -98,17 +117,31 @@ private fun ColumnScope.PlayerControls(repo: MusicRepository, song: Song?, fit: 
     }
     Spacer(Modifier.height(if (compact) 8.dp else if (wide) 20.dp else 16.dp))
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        when {
-            compact -> Controls(repo, song?.playing == true, loading = song?.buffering == true, size = 52.dp, playSize = 60.dp, gap = 8.dp)
-            wide -> Controls(repo, song?.playing == true, loading = song?.buffering == true, size = 72.dp, playSize = 88.dp, gap = 36.dp)
-            else -> Controls(repo, song?.playing == true, loading = song?.buffering == true, size = 64.dp, playSize = 76.dp, gap = 12.dp)
+        val m = fit.sizes(wide)
+        // Archivos: el aleatorio a la derecha de los controles, marcado cuando está prendido (pedido 7743FE).
+        if (repo.mode == MusicMode.FILES && OwnShuffle.available) {
+            val c = LocalColors.current
+            IconButton(
+                ShuffleIcon, { OwnShuffle.toggle() }, Modifier.align(Alignment.CenterEnd), size = m.size,
+                color = if (OwnShuffle.on) c.primary else c.textMuted,
+                label = stringResource(R.string.music_shuffle),
+            )
         }
+        // Sin por dónde darle play a la app de Bluetooth de marca: sin botones (lo dice el texto), con la salida a Connect.
+        if (repo.phoneOnly) PhoneLinkButton(repo) else Controls(repo, song?.playing == true, loading = song?.buffering == true, size = m.size, playSize = m.play, gap = m.gap)
     }
     if (!wide && fit != ControlsFit.MINI && song != null && song.actions.isNotEmpty()) {
         Spacer(Modifier.height(if (compact) 4.dp else 8.dp))
         AppActions(repo, song)
     }
 }
+
+/** Flechas cruzadas (aleatorio), con el mismo trazo que los íconos de la app. */
+private val ShuffleIcon: ImageVector = ImageVector.Builder(defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f).apply {
+    for (d in listOf("M18 4l3 3l-3 3", "M18 20l3 -3l-3 -3", "M3 7h3a5 5 0 0 1 5 5a5 5 0 0 0 5 5h5", "M21 7h-5a4.98 4.98 0 0 0 -3 1m-4 8a4.98 4.98 0 0 1 -3 1h-3")) {
+        addPath(addPathNodes(d), stroke = SolidColor(Color.Black), strokeLineWidth = 2f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round)
+    }
+}.build()
 
 /** Los botones propios de la app (en Spotify: me gusta, aleatorio, repetir). */
 @Composable
@@ -139,16 +172,19 @@ private fun TimeBar(repo: MusicRepository, song: Song) {
     var dragFraction by remember { mutableStateOf<Float?>(null) }
     val duration = song.durationMs
     val fraction = dragFraction ?: (pos.toFloat() / duration).coerceIn(0f, 1f)
+    // Los gestos se reinician solo al cambiar de canción: cada play, pausa o posición trae otra instancia de [song]
+    // y, con ella de llave, un arrastre se cortaba cuando la app publicaba su estado (Spotify al cargar).
+    val gestureKey = Triple(song.pkg, song.title, duration)
     BoxWithConstraints(
         Modifier
             .fillMaxWidth()
             .height(32.dp)
             .then(
                 if (song.seekable) Modifier
-                    .pointerInput(song) {
+                    .pointerInput(gestureKey) {
                         detectTapGestures { o -> repo.seekTo((o.x / size.width * duration).toLong()) }
                     }
-                    .pointerInput(song) {
+                    .pointerInput(gestureKey) {
                         detectHorizontalDragGestures(
                             onDragStart = { o -> dragFraction = (o.x / size.width).coerceIn(0f, 1f) },
                             onHorizontalDrag = { change, d ->
@@ -178,7 +214,9 @@ private fun TimeBar(repo: MusicRepository, song: Song) {
     }
 }
 
+/** "3:07" o "1:02:07"; con dígitos latinos en todos los idiomas (como los muestran los reproductores). */
 internal fun formatTime(ms: Long): String {
     val s = (ms / 1000).coerceAtLeast(0)
-    return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
+    return if (s >= 3600) String.format(Locale.ROOT, "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60)
+    else String.format(Locale.ROOT, "%d:%02d", s / 60, s % 60)
 }

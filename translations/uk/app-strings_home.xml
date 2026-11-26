@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="road_speed">Швидкість</string>
+    <string name="road_speed_text">Лише число</string>
+    <string name="road_speed_gauge">Спідометр</string>
+    <string name="road_speed_show">Показувати швидкість</string>
+    <string name="trip_time">Час</string>
+    <string name="trip_average">Середня</string>
+    <string name="road_trip_distance">Відстань</string>
+    <string name="trip_heading">Курс</string>
+    <string-array name="compass_points">
+        <item>Пн</item>
+        <item>ПнСх</item>
+        <item>Сх</item>
+        <item>ПдСх</item>
+        <item>Пд</item>
+        <item>ПдЗх</item>
+        <item>Зх</item>
+        <item>ПнЗх</item>
+    </string-array>
+    <string name="value_with_unit">%1$s %2$s</string>
+    <string name="two_parts">%1$s · %2$s</string>
+    <string name="weather_degrees">%1$d°</string>
+    <string name="weather_range">%1$d° / %2$d°</string>
+    <string name="page_n">Сторінка %1$d</string>
+    <string name="page_add">Додати сторінку</string>
+    <string name="page_remove">Прибрати сторінку</string>
+    <string name="page_remove_question">Прибрати сторінку %1$d?</string>
+    <string name="page_remove_message">Її віджети зникнуть; твоя перша сторінка та інші залишаться.</string>
+    <string name="page_background_title">Фон сторінки %1$d</string>
+    <string name="page_background_image">Зображення</string>
+    <string name="page_background_map">Карта</string>
+    <string name="map_backdrop_help">Карта стежить за тобою позаду віджетів, а ти — на вільному місці. Її стиль — із «Налаштування → Застосунки → Навігація»; без інтернету вона використовує твої офлайн-райони.</string>
+    <string name="map_backdrop_has_widget">На цій сторінці є віджет «Карта»: з картою на тлі їх буде дві.</string>
+    <string name="map_backdrop_remove_widget">Прибрати віджет «Карта»</string>
+</resources>

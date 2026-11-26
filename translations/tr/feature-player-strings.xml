@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_name">LiteDash oynatıcı</string>
+    <string name="player_channel">Müzik</string>
+    <string name="player_play">Oynat</string>
+    <string name="player_pause">Duraklat</string>
+    <string name="player_next">Sonraki</string>
+    <string name="player_previous">Önceki</string>
+    <string name="player_cannot_play">Çalınamadı. Başka bir istasyon deneyin veya bağlantıyı kontrol edin.</string>
+    <string name="player_timeout">İstasyon yanıt vermiyor. Başka birini deneyin.</string>
+    <string name="player_no_focus">Sesi başka bir uygulama kullanıyor. Oynat’a tekrar basın.</string>
+    <string name="library_no_drive">Müzik olan bir USB sürücü takın</string>
+    <string name="library_no_permission">LiteDash’in sürücüdeki müziği okumak için izne ihtiyacı var</string>
+    <string name="library_grant">İzin ver</string>
+    <string name="library_loading">Sürücü okunuyor…</string>
+    <string name="library_folders">Klasörler</string>
+    <string name="library_artists">Sanatçılar</string>
+    <string name="library_albums">Albümler</string>
+    <string name="library_all">Tümü</string>
+    <string name="library_play_all">Tümünü çal</string>
+    <plurals name="library_songs">
+        <item quantity="one">%1$d şarkı</item>
+        <item quantity="other">%1$d şarkı</item>
+    </plurals>
+    <string name="library_unknown">Bilinmeyen</string>
+    <string name="library_root">Sürücü kökü</string>
+    <string name="radio_nearby">Yakınınızda</string>
+    <string name="radio_favorites">Favoriler</string>
+    <string name="radio_search_tab">Ara</string>
+    <string name="radio_search_hint">İstasyon adı</string>
+    <string name="radio_search_help">Bir istasyonun adını yazın</string>
+    <string name="radio_loading">İstasyonlar aranıyor…</string>
+    <string name="radio_none">İstasyon bulunamadı. İnternet bağlantınızı kontrol edin.</string>
+    <string name="radio_no_location">Konum yok: bunlar ülkenizin en çok dinlenenleri. Bölgenizdekileri görmek için Modüller → İzinler’de konuma izin verin.</string>
+    <string name="radio_no_favorites">Burada tutmak için bir istasyonun yıldızına dokunun.</string>
+    <string name="radio_km">%1$d km</string>
+    <string name="library_pick_folder">Klasör seç</string>
+    <string name="library_clear_folder">Klasörü temizle</string>
+    <string name="library_pick_folder_help">Müziğiniz sürücüde ama görünmüyorsa klasörünü seçin: LiteDash hatırlar.</string>
+    <string name="library_unreadable">%1$s sürücüsünü görebiliyorum ama üniteniz uygulamaların şarkılarını okumasına izin vermiyor. Klasörünü seçin, LiteDash hatırlar.</string>
+    <string name="library_browse_memory">Açılmadı mı? Depolamaya göz at</string>
+    <string name="library_capped">Gösterilen şarkı: %1$s</string>
+    <string name="player_cannot_open_track">Bu şarkı açılamadı.</string>
+</resources>

@@ -52,6 +52,7 @@ fun RadioTile(
         artwork = artwork,
         skip = skip,
         onOpen = onOpen,
+        // Estación siguiente o anterior, como sus botones.
     )
 }
 

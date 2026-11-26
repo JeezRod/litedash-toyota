@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="weather_switch">Погода</string>
+    <string name="reminder_pick_date">Когда срок «%1$s»?</string>
+    <string name="tab_home">Главный экран</string>
+    <string name="tab_interface">Интерфейс</string>
+    <string name="accent_title">Цвет интерфейса</string>
+    <string name="accent_help">Переключатели, кнопки, воспроизведение и полосы прогресса. Карточки и фон не меняются.</string>
+    <string name="cards_title">Карточки</string>
+    <string name="cards_help">Как выглядят карточки во всём приложении: их цвет и просвечивает ли фон.</string>
+    <string name="cards_solid">Сплошные</string>
+    <string name="cards_glass">Стекло</string>
+    <string name="cards_opacity">Насколько видны</string>
+    <string name="cards_glass_help">Твои обои видны размытыми за каждой карточкой; поверх карты на фоне карта видна приглушённой.</string>
+    <string name="cards_themes">Сочетания</string>
+    <string name="language_search">Найди свой язык</string>
+    <string name="language_not_found">Этого языка пока нет. Помоги перевести на litedash.dev/translate.</string>
+    <string name="factory_look">По умолчанию</string>
+    <string name="tab_language_units">Язык и единицы</string>
+    <string name="tab_theme_brightness">Тема и яркость</string>
+    <plurals name="language_show_all">
+        <item quantity="one">Показать язык (%d)</item>
+        <item quantity="few">Все языки (%d)</item>
+        <item quantity="many">Все языки (%d)</item>
+        <item quantity="other">Все языки (%d)</item>
+    </plurals>
+    <string name="language_show_less">Свернуть</string>
+</resources>

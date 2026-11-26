@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="weather_switch">Καιρός</string>
+    <string name="reminder_pick_date">Πότε λήγει: %1$s;</string>
+    <string name="tab_home">Αρχική</string>
+    <string name="tab_interface">Διεπαφή</string>
+    <string name="accent_title">Χρώμα διεπαφής</string>
+    <string name="accent_help">Διακόπτες, κουμπιά, αναπαραγωγή και γραμμές προόδου. Οι κάρτες και το φόντο μένουν ίδια.</string>
+    <string name="cards_title">Κάρτες</string>
+    <string name="cards_help">Πώς φαίνονται οι κάρτες σε όλη την εφαρμογή: το χρώμα τους και αν διακρίνεται το φόντο.</string>
+    <string name="cards_solid">Συμπαγείς</string>
+    <string name="cards_glass">Γυαλί</string>
+    <string name="cards_opacity">Πόσο φαίνονται</string>
+    <string name="cards_glass_help">Η ταπετσαρία σας φαίνεται θολή πίσω από κάθε κάρτα· πάνω σε χάρτη φόντου, ο χάρτης φαίνεται αχνός.</string>
+    <string name="cards_themes">Συνδυασμοί</string>
+    <string name="language_search">Βρες τη γλώσσα σου</string>
+    <string name="language_not_found">Αυτή η γλώσσα δεν υπάρχει ακόμα. Βοήθησέ μας να τη μεταφράσουμε στο litedash.dev/translate.</string>
+    <string name="factory_look">Προεπιλογή</string>
+    <string name="tab_language_units">Γλώσσα και μονάδες</string>
+    <string name="tab_theme_brightness">Θέμα και φωτεινότητα</string>
+    <plurals name="language_show_all">
+        <item quantity="one">Εμφάνιση γλώσσας (%d)</item>
+        <item quantity="other">Όλες οι γλώσσες (%d)</item>
+    </plurals>
+    <string name="language_show_less">Λιγότερες</string>
+</resources>

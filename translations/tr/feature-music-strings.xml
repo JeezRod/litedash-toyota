@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="music_explain">Herhangi bir uygulamada ne çaldığını görün ve kontrol edin. Bildirim erişimi gerektirir.</string>
+    <string name="enable">Aç</string>
+    <string name="nothing_playing">Çalan bir şey yok</string>
+    <string name="open_an_app">Favori uygulamanızda müzik çalın</string>
+    <string name="resume_explain">Kaldığınız yerden devam etmek için oynat’a basın.</string>
+    <string name="no_song_info">Şarkı bilgisi yok</string>
+    <string name="opening_app">%1$s açılıyor…</string>
+    <string name="opening_wait">Neredeyse hazır: birazdan başlıyor.</string>
+    <string name="source_files">Dosyalar</string>
+    <string name="source_bluetooth">Bluetooth</string>
+    <string name="source_radio">Radyo</string>
+    <string name="bluetooth_connect_phone">Telefonunuzu Bluetooth ile bağlayın</string>
+    <string name="music_from_phone">Müziği telefonundan kontrol et</string>
+    <string name="usb_drive">USB sürücü</string>
+    <string name="usb_drive_in">USB sürücü bağlı: %1$s</string>
+    <string name="player_connecting">Bağlanılıyor…</string>
+    <string name="radio">Radyo</string>
+    <string name="radio_explain">Ünitenizin radyosunu kontrol edin (açarsanız internet radyosunu da). Bildirim erişimi gerektirir.</string>
+    <string name="radio_internet">İnternet</string>
+    <string name="radio_fm">Ünite FM</string>
+    <string name="radio_unlinked">Ünitenizin radyosunu Ayarlar’da bağlayın veya internet radyosunu açın</string>
+    <string name="radio_settings">Ayarlar</string>
+    <string name="mode_app">Uygulama</string>
+    <string name="radio_fm_label">FM radyo</string>
+    <string name="sound_question">Duyabiliyor musunuz?</string>
+    <string name="sound_question_muted">Duyabiliyor musunuz? Not: müzik sesi 0\'da</string>
+    <string name="sound_yes">Evet</string>
+    <string name="sound_no">Hayır</string>
+    <string name="sound_failed">Çaldıramadık</string>
+    <string name="sound_report">Bildir</string>
+    <string name="recipe_none">Henüz kalibre edilmedi: ilk çaldığında kendiliğinden olur</string>
+    <string name="recipe_plain">Olduğu gibi çalışır</string>
+    <string name="recipe_tw_source8">Ünitenin Bluetooth girişi</string>
+    <string name="recipe_fyt_toggle">Ünitenin kaynağını değiştirir</string>
+    <string name="recipe_profile">Doğrudan radyo kontrolü</string>
+    <string name="recipe_open_bluetooth">Bluetooth uygulamasını açıp geri döner</string>
+    <string name="recipe_open_radio">Radyo uygulamasını açıp geri döner</string>
+    <string name="recipe_failed">Yol bulunamadı</string>
+    <string name="music_phone_link">LiteDash Connect’i kullan</string>
+    <string name="music_shuffle">Karıştır</string>
+</resources>

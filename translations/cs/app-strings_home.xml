@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="road_speed">Rychlost</string>
+    <string name="road_speed_text">Jen číslo</string>
+    <string name="road_speed_gauge">Tachometr</string>
+    <string name="road_speed_show">Zobrazit rychlost</string>
+    <string name="trip_time">Čas</string>
+    <string name="trip_average">Průměr</string>
+    <string name="road_trip_distance">Vzdálenost</string>
+    <string name="trip_heading">Směr</string>
+    <string-array name="compass_points">
+        <item>S</item>
+        <item>SV</item>
+        <item>V</item>
+        <item>JV</item>
+        <item>J</item>
+        <item>JZ</item>
+        <item>Z</item>
+        <item>SZ</item>
+    </string-array>
+    <!-- A number with its unit ("12.3 km") and two pieces on one line ("Insurance · in 3 days") -->
+    <string name="value_with_unit">%1$s %2$s</string>
+    <string name="two_parts">%1$s · %2$s</string>
+    <string name="weather_degrees">%1$d°</string>
+    <string name="weather_range">%1$d° / %2$d°</string>
+    <string name="page_n">Stránka %1$d</string>
+    <string name="page_add">Přidat stránku</string>
+    <string name="page_remove">Odebrat stránku</string>
+    <string name="page_remove_question">Odebrat stránku %1$d?</string>
+    <string name="page_remove_message">Její widgety zmizí; tvoje první stránka a ostatní zůstanou.</string>
+    <string name="page_background_title">Pozadí stránky %1$d</string>
+    <string name="page_background_image">Obrázek</string>
+    <string name="page_background_map">Mapa</string>
+    <string name="map_backdrop_help">Mapa tě sleduje za widgety, s tebou ve volném místě. Její styl je ten z Nastavení → Aplikace → Navigace; bez internetu použije tvoje offline oblasti.</string>
+    <string name="map_backdrop_has_widget">Tato stránka má widget Mapa: s mapou na pozadí by byly vidět dvě.</string>
+    <string name="map_backdrop_remove_widget">Odebrat widget Mapa</string>
+</resources>

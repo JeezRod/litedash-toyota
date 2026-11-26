@@ -38,10 +38,17 @@ class ModelTest {
         }
     }
 
+    /** Las que llevan auto: todas menos las que son a propósito sin él (Grafito solo de pie o sin mapa; Ruta flotante; Pista lo lleva siempre en la carretera). */
+    private val Template.hasCar get() = this !in setOf(
+        Template.SPEED, Template.MINIMAL, Template.SPEED_WIDGETS, Template.WALL_CARDS, Template.WALL_SIDE, Template.ROUTE, Template.MAP_BACKGROUND,
+        Template.DESIGN_GRAPHITE, Template.DESIGN_ROUTE, Template.DESIGN_NEON, Template.DESIGN_TRACK,
+    )
+
     @Test
     fun everyTemplateHasCar() {
-        // Menos las que son a propósito sin auto.
-        for (c in screens) for (p in Template.entries.filter { it.hasCar }) {
+        // Menos las que son a propósito sin auto. Los Diseños son para pantallas de auto: en el teléfono chico pueden
+        // no tenerlo (su especificación es la de DesignLayoutsTest).
+        for (p in Template.entries.filter { it.hasCar }) for (c in if (p.isDesign) carScreens else screens) {
             assertTrue("$p en ${c.key}", p.layout(c).any { it.type == TileTypes.CAR })
         }
     }
@@ -82,11 +89,12 @@ class ModelTest {
     @Test
     fun widgetsKeepTheirSizesOnTheirScreens() {
         // En las pantallas de auto (no el teléfono) para las que es cada plantilla:
-        // auto de 3×2 o más; música y radio de 3 de ancho y hasta 3 filas.
+        // auto de 3×2 o más; música y radio de 3 de ancho y hasta 3 filas (los Diseños llevan a propósito la música alta:
+        // Neón, Pista de pie).
         for (c in carScreens) for (p in Template.entries.filter { c.size in it.sizes }) for (tile in p.layout(c)) {
             when (tile.type) {
                 TileTypes.CAR -> assertTrue("$p en ${c.key}: $tile", tile.width >= 3 && tile.height >= 2)
-                TileTypes.MUSIC, TileTypes.RADIO -> assertTrue("$p en ${c.key}: $tile", tile.width >= 3 && tile.height <= 3)
+                TileTypes.MUSIC, TileTypes.RADIO -> assertTrue("$p en ${c.key}: $tile", tile.width >= 3 && (p.isDesign || tile.height <= 3))
             }
         }
     }
@@ -169,6 +177,26 @@ class ModelTest {
         narrow.forEach { t -> assertTrue(narrow.fits(t, Grid(9, 6))) }
         // Una fila más: igual que antes.
         assertEquals(saved, saved.adaptTo(Grid(10, 7), limits))
+    }
+
+    @Test
+    fun adaptRepairsADamagedSavedLayout() {
+        val c = Grid(10, 6)
+        val limits = { type: String -> if (type == TileTypes.CAR) SizeLimits(4, 3) else SizeLimits(2, 2) }
+        val damaged = listOf(
+            Tile("car", TileTypes.CAR, 0, 0, 3, 2), // abajo del mínimo de esta versión
+            Tile("music", TileTypes.MUSIC, 2, 1, 4, 3), // encima del auto
+            Tile("clock", TileTypes.CLOCK, 8, 5, 4, 4), // se sale de la cuadrícula
+        )
+        val out = damaged.adaptTo(c, limits)
+        assertEquals(3, out.size)
+        out.forEach { t ->
+            val m = limits(t.type)
+            assertTrue(t.width >= m.minWidth && t.height >= m.minHeight)
+            assertTrue(out.fits(t, c))
+        }
+        // Uno sano se queda tal cual.
+        assertEquals(out, out.adaptTo(c, limits))
     }
 
     @Test

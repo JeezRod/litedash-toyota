@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="road_speed">속도</string>
+    <string name="road_speed_text">숫자만</string>
+    <string name="road_speed_gauge">속도계</string>
+    <string name="road_speed_show">속도 표시</string>
+    <string name="trip_time">시간</string>
+    <string name="trip_average">평균</string>
+    <string name="road_trip_distance">거리</string>
+    <string name="trip_heading">방향</string>
+    <string-array name="compass_points">
+        <item>북</item>
+        <item>북동</item>
+        <item>동</item>
+        <item>남동</item>
+        <item>남</item>
+        <item>남서</item>
+        <item>서</item>
+        <item>북서</item>
+    </string-array>
+    <string name="value_with_unit">%1$s %2$s</string>
+    <string name="two_parts">%1$s · %2$s</string>
+    <string name="weather_degrees">%1$d°</string>
+    <string name="weather_range">%1$d° / %2$d°</string>
+    <string name="page_n">%1$d페이지</string>
+    <string name="page_add">페이지 추가</string>
+    <string name="page_remove">페이지 제거</string>
+    <string name="page_remove_question">%1$d페이지를 제거할까요?</string>
+    <string name="page_remove_message">이 페이지의 위젯은 사라지고, 첫 페이지와 다른 페이지는 그대로예요.</string>
+    <string name="page_background_title">%1$d페이지 배경</string>
+    <string name="page_background_image">이미지</string>
+    <string name="page_background_map">지도</string>
+    <string name="map_backdrop_help">지도가 위젯 뒤에서 나를 따라가고, 빈 공간에 내 위치를 보여 줘요. 스타일은 설정 → 앱 → 내비게이션에서 정해요. 인터넷이 없으면 오프라인 지역을 써요.</string>
+    <string name="map_backdrop_has_widget">이 페이지에 지도 위젯이 있어요. 배경 지도를 쓰면 지도가 두 개 보여요.</string>
+    <string name="map_backdrop_remove_widget">지도 위젯 빼기</string>
+</resources>

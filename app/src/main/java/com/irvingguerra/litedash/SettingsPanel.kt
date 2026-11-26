@@ -3,8 +3,6 @@ package com.irvingguerra.litedash
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -23,12 +21,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,11 +45,12 @@ import com.irvingguerra.litedash.core.ui.LocalColors
 import com.irvingguerra.litedash.core.ui.Radius
 import com.irvingguerra.litedash.core.ui.Segmented
 import com.irvingguerra.litedash.core.ui.Typography
+import com.irvingguerra.litedash.core.ui.blockTouches
 
 /** Secciones de Ajustes en el orden del menú: cada cosa vive en un solo lugar. */
 enum class SettingsSection(val title: Int) {
     CAR(R.string.your_car), APPEARANCE(R.string.appearance), APPS(R.string.apps_section), WORKSHOP(R.string.workshop),
-    TIRES(R.string.tires), WHEEL(R.string.wheel), MODULES(R.string.modules), PHONE(R.string.phone_section), SYSTEM(R.string.system),
+    TIRES(R.string.tires), WHEEL(R.string.wheel), MODULES(R.string.modules), PHONE(R.string.phone_section), SYSTEM(R.string.about_help),
 }
 
 /**
@@ -84,53 +85,65 @@ fun SettingsPanel(
     revision: Int,
     close: () -> Unit,
     onEdit: () -> Unit,
-    onTemplates: () -> Unit,
+    /** El panel Diseños (Inicio y apariencia → Inicio → Diseño). */
+    onDesigns: () -> Unit,
+    /** El panel Agregar del inicio (Inicio y apariencia → Inicio → Agregar widget). */
+    onAddTile: () -> Unit,
     start: SettingsSection = SettingsSection.CAR,
     /** Las llantas a pantalla completa (desde la tarjeta de Salud). */
     onTires: () -> Unit = {},
 ) {
     val c = LocalColors.current
-    var section by rememberSaveable { mutableStateOf(start) }
+    // Si el inicio pide otra sección con Ajustes abiertos (p. ej. el aviso de la calibración), cambia a ella.
+    var section by rememberSaveable(start) { mutableStateOf(start) }
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .background(c.background)
+            .canvas()
             // Atrapa los toques para que no lleguen al inicio de abajo.
-            .clickable(remember { MutableInteractionSource() }, indication = null) {}
+            .blockTouches()
             .safeDrawingPadding(),
     ) {
-        val narrow = maxWidth < 720.dp
+        // Angosto (menú solo con íconos) si con el menú ancho las tarjetas quedarían apretadas (p. ej. 1080×1920 a 240 dpi).
+        val narrow = maxWidth < WIDE_MENU + MIN_CONTENT
         Row(Modifier.fillMaxSize()) {
             Column(
-                Modifier.width(if (narrow) 88.dp else 270.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(12.dp),
+                Modifier.width(if (narrow) 88.dp else WIDE_MENU).fillMaxHeight().verticalScroll(rememberScrollState()).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 MenuEntry(Icons.back, stringResource(R.string.back_home), selected = false, narrow, close)
                 Spacer(Modifier.height(10.dp))
                 for (s in SettingsSection.entries) if (s.shown(d, section)) MenuEntry(s.icon(), stringResource(s.title), s == section, narrow) { section = s }
             }
-            Column(
-                Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(start = 8.dp, end = 24.dp, top = 20.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Label(stringResource(section.title), Typography.title.copy(fontSize = 30.sp), maxLines = 1)
-                when (section) {
-                    SettingsSection.APPEARANCE -> Appearance(d, revision, onEdit, onTemplates, onTires = { section = SettingsSection.TIRES })
-                    SettingsSection.CAR -> CarSettings(d)
-                    SettingsSection.APPS -> AppsSettings(d)
-                    SettingsSection.WHEEL -> {
-                        SettingsCard(help = stringResource(R.string.wheel_help)) { WheelSettings(d.wheel, d.prefs) }
-                        SettingsCard(stringResource(R.string.wheel_assigned)) { WheelAssigned(d.prefs) }
+            // Cada sección con su propio scroll: al cambiar de sección se empieza arriba.
+            key(section) {
+                Column(
+                    Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(start = 8.dp, end = 24.dp, top = 20.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Label(stringResource(section.title), Typography.title.copy(fontSize = 30.sp), maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                        // Navegando: la pastilla de la guía (lleva a ella).
+                        LocalGuidePill.current?.invoke()
                     }
-                    // Con el OBD apagado el escáner ni se crea.
-                    SettingsSection.WORKSHOP -> if (d.obdModule) Workshop(d, onTires)
-                    SettingsSection.TIRES -> TiresSettings(d)
-                    SettingsSection.MODULES -> Modules(d, revision, open = { section = it })
-                    SettingsSection.PHONE -> PhoneSettings(d, openMusic = {
-                        openMusicSettings()
-                        section = SettingsSection.APPS
-                    })
-                    SettingsSection.SYSTEM -> SystemSettings(d)
+                    when (section) {
+                        SettingsSection.APPEARANCE -> Appearance(d, revision, onEdit, onDesigns, onAddTile)
+                        SettingsSection.CAR -> CarSettings(d)
+                        SettingsSection.APPS -> AppsSettings(d, requestMap = {
+                            openMapRequest()
+                            section = SettingsSection.SYSTEM
+                        })
+                        SettingsSection.WHEEL -> {
+                            SettingsCard(help = stringResource(R.string.wheel_help)) { WheelSettings(d.wheel, d.prefs) }
+                            SettingsCard(stringResource(R.string.wheel_assigned)) { WheelAssigned(d.prefs) }
+                        }
+                        // Con el OBD apagado el escáner ni se crea.
+                        SettingsSection.WORKSHOP -> if (d.obdModule) Workshop(d, onTires)
+                        SettingsSection.TIRES -> TiresSettings(d)
+                        SettingsSection.MODULES -> Modules(d, revision, open = { section = it })
+                        SettingsSection.PHONE -> PhoneSettings(d)
+                        SettingsSection.SYSTEM -> SystemSettings(d)
+                    }
                 }
             }
         }
@@ -140,20 +153,35 @@ fun SettingsPanel(
 /**
  * Pestañas de una sección con muchas partes (para no hacer tanto scroll). Devuelve la
  * elegida; se recuerda por sección ([key]) mientras LiteDash siga abierto (solo en memoria).
+ * [start] = con cuál abre esta vez (se ve desde el primer cuadro y queda recordada; solo cuenta al entrar).
  */
 @Composable
-internal fun tabs(titles: List<Int>, key: String): Int {
-    val selected = TabMemory[key] ?: 0
-    // Mismo control que las opciones (estilo iOS): una pestaña a la vez.
-    Segmented(titles.mapIndexed { i, t -> i to stringResource(t) }, selected, { TabMemory[key] = it }, Modifier.horizontalScroll(rememberScrollState()))
+internal fun tabs(titles: List<Int>, key: String, start: Int? = null): Int {
+    var opening by remember { mutableStateOf(start) }
+    LaunchedEffect(Unit) {
+        opening?.let { TabMemory[key] = it }
+        opening = null
+    }
+    val selected = opening ?: TabMemory[key] ?: 0
+    // Mismo control que las opciones (estilo iOS): una pestaña a la vez. Si no caben bajan de renglón (como cualquier
+    // Segmented): todas a la vista, también la elegida al abrir desde otro lado (antes se desplazaban y la última
+    // quedaba cortada sin que se notara que había más).
+    Segmented(titles.mapIndexed { i, t -> i to stringResource(t) }, selected, {
+        opening = null
+        TabMemory[key] = it
+    })
     return selected
 }
 
-/** Las pestañas de Ajustes → Sistema ([SystemTab]). */
+/** Lo que mide el menú de Ajustes con nombres y lo mínimo que necesitan las tarjetas a su lado (con márgenes). */
+private val WIDE_MENU = 270.dp
+private val MIN_CONTENT = 452.dp
+
+/** Las pestañas de Ajustes → Acerca de y ayuda ([SystemTab]). */
 internal const val SYSTEM_TABS = "system"
 
-/** Ajustes → Sistema abre en Actualizaciones (desde el aviso de versión nueva). */
-internal fun openUpdates() = selectTab(SYSTEM_TABS, SystemTab.UPDATES.ordinal)
+/** Ajustes → Acerca de y ayuda abre en Acerca de (desde el aviso de versión nueva). */
+internal fun openAbout() = selectTab(SYSTEM_TABS, SystemTab.ABOUT.ordinal)
 
 /**
  * La pestaña elegida en cada sección (al cambiar de sección, o cerrar y abrir Ajustes, sigue ahí).
@@ -185,7 +213,7 @@ private fun MenuEntry(icon: ImageVector, text: String, selected: Boolean, narrow
     }
 }
 
-/** Tarjeta de Ajustes: título, controles y el ícono de la sección grande y tenue a la derecha. */
+/** Tarjeta de Ajustes: título (opcional), controles y una ayuda abajo (opcional). */
 @Composable
 internal fun SettingsCard(
     title: String? = null,

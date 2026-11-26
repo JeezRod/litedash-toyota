@@ -12,7 +12,7 @@ class MvtTest {
     @Test
     fun readsRoadsWaterAndSkipsTheRest() {
         val tile = message {
-            // Edificios: no se leen.
+            // Edificios: ya no se leen.
             bytes(3, layer("building", keys = listOf("render_height"), values = listOf("12"), features = listOf(feature(3, listOf(0, 0), square()))))
             // Una calle primaria de (10, 20) a (110, 20) y luego a (110, 70), y una vereda (no se dibuja).
             bytes(3, layer(
@@ -82,12 +82,32 @@ class MvtTest {
     private fun command(id: Int, count: Int) = (count shl 3) or id
     private fun zz(n: Int) = (n shl 1) xor (n shr 31)
 
-    private fun layer(name: String, keys: List<String>, values: List<String>, features: List<ByteArray>) = message {
+    private fun layer(name: String, keys: List<String>, values: List<String>, features: List<ByteArray>) =
+        rawLayer(name, keys, values.map { v -> message { string(1, v) } }, features)
+
+    /** Una capa con los valores ya armados (números de las etiquetas). */
+    private fun rawLayer(name: String, keys: List<String>, values: List<ByteArray>, features: List<ByteArray>) = message {
         string(1, name)
         features.forEach { bytes(2, it) }
         keys.forEach { string(3, it) }
-        values.forEach { v -> bytes(4, message { string(1, v) }) }
+        values.forEach { v -> bytes(4, v) }
         varint(5, 4096)
+    }
+
+    @Test
+    fun readsOneWayAsNumber() {
+        // oneway como entero (campo 4 del valor), no como texto.
+        val tile = message {
+            bytes(3, rawLayer(
+                "transportation", keys = listOf("class", "oneway"), values = listOf(message { string(1, "primary") }, message { varint(4, 1) }),
+                features = listOf(
+                    feature(2, listOf(0, 0, 1, 1), listOf(command(1, 1), zz(0), zz(0), command(2, 1), zz(5), zz(5))),
+                    feature(2, listOf(0, 0), listOf(command(1, 1), zz(0), zz(0), command(2, 1), zz(5), zz(5))),
+                ),
+            ))
+        }
+        val t = parseVectorTile(tile)!!
+        assertArrayEquals(booleanArrayOf(true, false), t.oneway[RoadTier.PRIMARY.ordinal])
     }
 
     private fun feature(type: Int, tags: List<Int>, geometry: List<Int>) = message {

@@ -38,8 +38,10 @@ enum class WheelAction(val stored: String, val title: Int) {
     VOLUME_UP("volume_up", R.string.wheel_volume_up),
     VOLUME_DOWN("volume_down", R.string.wheel_volume_down),
     MUTE("mute", R.string.wheel_mute),
-    NAVIGATE("navigate", R.string.wheel_navigate),
-    MUSIC("music", R.string.wheel_music),
+    NAVIGATE("navigate", R.string.bar_item_navigate),
+    PROJECTION("projection", R.string.wheel_projection),
+    PHONE("phone", R.string.wheel_phone),
+    MUSIC("music", R.string.bar_item_music),
     VOICE("voice", R.string.wheel_voice),
     HOME("home", R.string.wheel_home),
     NOTHING("nothing", R.string.wheel_nothing);
@@ -63,7 +65,7 @@ class WheelKeys(private val context: Context, private val prefs: Preferences) {
     var presses by mutableIntStateOf(0)
         private set
 
-    /** La acción que el inicio debe hacer (abrir el mapa, la música…); el inicio la [consume]. */
+    /** La acción que el inicio debe hacer (abrir el mapa, la música…); la [consume] el inicio de la ventana al frente. */
     var request by mutableStateOf<WheelAction?>(null)
         private set
 
@@ -75,7 +77,11 @@ class WheelKeys(private val context: Context, private val prefs: Preferences) {
     /** true si LiteDash se quedó con la tecla (no se le pasa a Android). */
     fun onKey(event: KeyEvent, music: MusicRepository): Boolean {
         val code = event.keyCode
-        if (code in IGNORED) return false
+        // La tecla de volumen que aprieta LiteDash ([SystemVolume]) no es del volante: sigue al sistema.
+        val own = SystemVolume.isOwn(event)
+        // Solo botones: lo que se escribe con un teclado (letras y números) no se anota.
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 && !event.isPrintingKey) note(if (own) "$code*" else "$code")
+        if (own || code in IGNORED) return false
         learning?.let { learn ->
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) learn(code)
             return true
@@ -89,16 +95,25 @@ class WheelKeys(private val context: Context, private val prefs: Preferences) {
         return true
     }
 
+    /** Las últimas teclas que llegaron (con * las que apretó LiteDash), para el reporte. */
+    private val recent = ArrayDeque<String>()
+
+    private fun note(key: String) = synchronized(recent) {
+        recent.addLast(key)
+        while (recent.size > RECENT_KEPT) recent.removeFirst()
+    }
+
+    /** Para el reporte: las últimas teclas recibidas (keyCode; * = la apretó LiteDash). */
+    fun describe(): String = "Volante: últimas teclas=${synchronized(recent) { recent.joinToString() }.ifEmpty { "ninguna" }}"
+
     private fun run(action: WheelAction, music: MusicRepository) {
-        val audio = context.getSystemService(AudioManager::class.java)
-        fun adjust(direction: Int) = runCatching {
-            audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
-        }
+        fun adjust(direction: Int) = SystemVolume.adjust(context, direction, ui = true)
         when (action) {
-            // Si lo que suena es la radio (y la música no), el volante la controla a ella; si no, a la
-            // música (aunque la radio de fábrica muestre su estación en pausa: el método de música manda).
+            // Si lo que suena es la radio (y la música no), el volante la controla a ella; si no, a la música (aunque la
+            // radio de fábrica muestre su estación en pausa: el método de música manda). Se pregunta qué suena de verdad
+            // ([MusicRepository.Lens.playingNow]): sin widget Radio a la vista su canción no se conoce.
             WheelAction.PLAY_PAUSE, WheelAction.NEXT, WheelAction.PREVIOUS -> {
-                val lens = if (music.radio.song?.playing == true && music.song?.playing != true) music.radio else music.music
+                val lens = if (music.radio.playingNow() && !music.music.playingNow()) music.radio else music.music
                 when (action) {
                     WheelAction.PLAY_PAUSE -> lens.toggle()
                     WheelAction.NEXT -> lens.next()
@@ -114,6 +129,8 @@ class WheelKeys(private val context: Context, private val prefs: Preferences) {
     }
 
     companion object {
+        private const val RECENT_KEPT = 6
+
         /** Teclas que nunca se aprenden ni se cambian: navegar la pantalla y "atrás". */
         val IGNORED = setOf(
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_HOME, KeyEvent.KEYCODE_APP_SWITCH, KeyEvent.KEYCODE_POWER,
@@ -169,8 +186,10 @@ fun WheelSettings(keys: WheelKeys, prefs: Preferences) {
                 Label(stringResource(R.string.wheel_learned, keyName(code)), Typography.subtitle)
                 Label(stringResource(R.string.wheel_choose), Typography.small, c.textMuted)
                 val current = prefs.wheelKeys[code]?.let(WheelAction::fromStored) ?: WheelAction.NORMAL
+                // «Voz» solo si la pantalla trae asistente (como el botón de la barra); si ya la tenía, se sigue viendo.
+                val hasVoice = rememberVoiceIntent() != null
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    for (a in WheelAction.entries) {
+                    for (a in WheelAction.entries.filter { it != WheelAction.VOICE || hasVoice || it == current }) {
                         Button(stringResource(a.title), {
                             prefs.wheelKeys = if (a == WheelAction.NORMAL) prefs.wheelKeys - code else prefs.wheelKeys + (code to a.stored)
                             learned = null

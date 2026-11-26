@@ -1,27 +1,24 @@
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.compose)
 }
 
 android {
     namespace = "com.irvingguerra.litedash.feature.navigation"
-    compileSdk = 37
-    defaultConfig { minSdk = 23 }
-    buildFeatures { compose = true }
+    compileSdk = libs.versions.compileSdk.get().toInt()
+    defaultConfig { minSdk = libs.versions.minSdk.get().toInt() }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.toVersion(libs.versions.jvm.get())
+        targetCompatibility = JavaVersion.toVersion(libs.versions.jvm.get())
     }
-    buildTypes { create("benchmark") { initWith(getByName("release")) } }
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(libs.versions.jvm.get().toInt())
 }
 
 dependencies {
-    implementation(project(":core:ui"))
     implementation(platform(libs.compose.bom))
-    implementation(libs.compose.foundation)
-    implementation(libs.compose.ui)
+    // Solo el estado (mutableStateOf, @Immutable): la interfaz de la siguiente vuelta vive en la app.
+    implementation(libs.compose.runtime)
+    testImplementation(libs.junit)
 }

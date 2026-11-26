@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="road_speed">Hız</string>
+    <string name="road_speed_text">Sadece sayı</string>
+    <string name="road_speed_gauge">Hız göstergesi</string>
+    <string name="road_speed_show">Hızı göster</string>
+    <string name="trip_time">Süre</string>
+    <string name="trip_average">Ortalama</string>
+    <string name="road_trip_distance">Mesafe</string>
+    <string name="trip_heading">Yön</string>
+    <string-array name="compass_points">
+        <item>K</item>
+        <item>KD</item>
+        <item>D</item>
+        <item>GD</item>
+        <item>G</item>
+        <item>GB</item>
+        <item>B</item>
+        <item>KB</item>
+    </string-array>
+    <string name="value_with_unit">%1$s %2$s</string>
+    <string name="two_parts">%1$s · %2$s</string>
+    <string name="weather_degrees">%1$d°</string>
+    <string name="weather_range">%1$d° / %2$d°</string>
+    <string name="page_n">Sayfa %1$d</string>
+    <string name="page_add">Sayfa ekle</string>
+    <string name="page_remove">Sayfayı kaldır</string>
+    <string name="page_remove_question">%1$d. sayfa kaldırılsın mı?</string>
+    <string name="page_remove_message">Widget’ları kaldırılır; ilk sayfanız ve diğerleri kalır.</string>
+    <string name="page_background_title">%1$d. sayfanın arka planı</string>
+    <string name="page_background_image">Görsel</string>
+    <string name="page_background_map">Harita</string>
+    <string name="map_backdrop_help">Harita, widget’larınızın arkasında sizi takip eder; siz boş alanda görünürsünüz. Stili Ayarlar → Uygulamalar → Gezinme’deki gibidir; internet yoksa çevrimdışı bölgelerinizi kullanır.</string>
+    <string name="map_backdrop_has_widget">Bu sayfada Harita widget’ı var: arka planda haritayla iki harita görünür.</string>
+    <string name="map_backdrop_remove_widget">Harita widget’ını kaldır</string>
+</resources>

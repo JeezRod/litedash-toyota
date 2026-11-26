@@ -9,6 +9,7 @@ import android.media.MediaFormat
 import com.irvingguerra.litedash.core.ui.Https
 import java.io.IOException
 import java.io.InputStream
+import java.net.HttpURLConnection
 import java.nio.ByteBuffer
 
 /** Frecuencias de muestreo del índice de 4 bits de la cabecera ADTS. */
@@ -42,6 +43,7 @@ class AacStream(private val context: Context, private val url: String, private v
     @Volatile private var closed = false
     @Volatile private var volume = 1f
     private var thread: Thread? = null
+    @Volatile private var connection: HttpURLConnection? = null
 
     fun start() {
         thread = Thread({ run() }, "aac-stream").also { it.start() }
@@ -53,6 +55,9 @@ class AacStream(private val context: Context, private val url: String, private v
         volume = 0f
         runCatching { track?.setVolume(0f) }
         thread?.interrupt()
+        // Interrumpir el hilo no despierta una lectura de red bloqueada (seguía hasta 12 s con la conexión abierta):
+        // se cierra la conexión, en otro hilo (cerrar un HTTPS escribe en la red).
+        connection?.let { c -> Thread({ runCatching { c.disconnect() } }, "aac-close").start() }
     }
 
     fun setVolume(v: Float) {
@@ -69,8 +74,11 @@ class AacStream(private val context: Context, private val url: String, private v
                 connectTimeout = 8_000
                 readTimeout = 12_000
                 setRequestProperty("Icy-MetaData", "0")
-                setRequestProperty("User-Agent", "LiteDash")
+                setRequestProperty("User-Agent", USER_AGENT)
             }
+            this.connection = connection
+            // Lo pararon mientras conectaba: la conexión ya no se usa.
+            if (closed) return connection.disconnect()
             if (connection.responseCode !in 200..299) throw IOException("HTTP ${connection.responseCode}")
             val type = connection.contentType.orEmpty().lowercase()
             if (type.isNotEmpty() && !type.contains("aac") && !type.contains("mp4") && !type.contains("octet")) {
@@ -163,13 +171,13 @@ class AacStream(private val context: Context, private val url: String, private v
 }
 
 /** Un cuadro AAC ya sin cabecera, con lo que dice la cabecera. */
-private class AdtsFrame(val data: ByteArray, val size: Int, val objectType: Int, val rateIndex: Int, val sampleRate: Int, val channels: Int)
+internal class AdtsFrame(val data: ByteArray, val size: Int, val objectType: Int, val rateIndex: Int, val sampleRate: Int, val channels: Int)
 
 /**
  * Lee cuadros ADTS de un flujo: busca la palabra de sincronía (12 bits a 1), lee la
  * cabecera de 7 bytes (9 con CRC) y el cuadro que sigue. Un cuadro mal formado se salta.
  */
-private class AdtsReader(private val input: InputStream) {
+internal class AdtsReader(private val input: InputStream) {
     private val header = ByteArray(9)
     private val data = ByteArray(MAX_FRAME)
 

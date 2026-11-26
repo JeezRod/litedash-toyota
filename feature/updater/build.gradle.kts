@@ -1,30 +1,29 @@
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.compose)
 }
 
 android {
     namespace = "com.irvingguerra.litedash.feature.updater"
-    compileSdk = 37
-    defaultConfig { minSdk = 23 }
-    buildFeatures { compose = true }
+    compileSdk = libs.versions.compileSdk.get().toInt()
+    defaultConfig { minSdk = libs.versions.minSdk.get().toInt() }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.toVersion(libs.versions.jvm.get())
+        targetCompatibility = JavaVersion.toVersion(libs.versions.jvm.get())
     }
-    buildTypes { create("benchmark") { initWith(getByName("release")) } }
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(libs.versions.jvm.get().toInt())
 }
 
 dependencies {
     implementation(project(":core:ui"))
     implementation(platform(libs.compose.bom))
-    implementation(libs.compose.foundation)
-    implementation(libs.compose.ui)
+    // Solo el estado (mutableStateOf, @Immutable): la interfaz del actualizador vive en la app.
+    implementation(libs.compose.runtime)
     // FileProvider e IntentCompat (la app ya lo trae con Activity: no suma peso).
     implementation(libs.core)
     testImplementation(libs.junit)
+    // org.json de verdad en las pruebas (el de Android es solo un esqueleto fuera del equipo).
+    testImplementation(libs.json)
 }

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="weather_switch">สภาพอากาศ</string>
+    <string name="reminder_pick_date">%1$s ครบกำหนดเมื่อไร</string>
+    <string name="tab_home">หน้าหลัก</string>
+    <string name="tab_interface">อินเทอร์เฟซ</string>
+    <string name="accent_title">สีอินเทอร์เฟซ</string>
+    <string name="accent_help">สวิตช์ ปุ่ม ปุ่มเล่น และแถบความคืบหน้า การ์ดและพื้นหลังยังเหมือนเดิม</string>
+    <string name="cards_title">การ์ด</string>
+    <string name="cards_help">หน้าตาของการ์ดทั้งแอป: สีและจะให้เห็นพื้นหลังหรือไม่</string>
+    <string name="cards_solid">ทึบ</string>
+    <string name="cards_glass">กระจก</string>
+    <string name="cards_opacity">ความชัด</string>
+    <string name="cards_glass_help">วอลเปเปอร์ของคุณจะเห็นเป็นภาพเบลออยู่หลังการ์ดแต่ละใบ บนพื้นหลังแผนที่ แผนที่จะดูจางลง</string>
+    <string name="cards_themes">ชุดสี</string>
+    <string name="language_search">ค้นหาภาษาของคุณ</string>
+    <string name="language_not_found">ยังไม่มีภาษานี้ ช่วยเราแปลได้ที่ litedash.dev/translate</string>
+    <string name="factory_look">ค่าเริ่มต้น</string>
+    <string name="tab_language_units">ภาษาและหน่วย</string>
+    <string name="tab_theme_brightness">ธีมและความสว่าง</string>
+    <plurals name="language_show_all">
+        <item quantity="other">ดูทุกภาษา (%d)</item>
+    </plurals>
+    <string name="language_show_less">ดูน้อยลง</string>
+</resources>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="road_speed">ความเร็ว</string>
+    <string name="road_speed_text">ตัวเลขอย่างเดียว</string>
+    <string name="road_speed_gauge">มาตรวัดความเร็ว</string>
+    <string name="road_speed_show">แสดงความเร็ว</string>
+    <string name="trip_time">เวลา</string>
+    <string name="trip_average">เฉลี่ย</string>
+    <string name="road_trip_distance">ระยะทาง</string>
+    <string name="trip_heading">ทิศทาง</string>
+    <string-array name="compass_points">
+        <item>N</item>
+        <item>NE</item>
+        <item>E</item>
+        <item>SE</item>
+        <item>S</item>
+        <item>SW</item>
+        <item>W</item>
+        <item>NW</item>
+    </string-array>
+    <string name="value_with_unit">%1$s %2$s</string>
+    <string name="two_parts">%1$s · %2$s</string>
+    <string name="weather_degrees">%1$d°</string>
+    <string name="weather_range">%1$d° / %2$d°</string>
+    <string name="page_n">หน้า %1$d</string>
+    <string name="page_add">เพิ่มหน้า</string>
+    <string name="page_remove">ลบหน้า</string>
+    <string name="page_remove_question">ลบหน้า %1$d ไหม</string>
+    <string name="page_remove_message">วิดเจ็ตในหน้านี้จะหายไป หน้าแรกและหน้าอื่นยังอยู่</string>
+    <string name="page_background_title">พื้นหลังหน้า %1$d</string>
+    <string name="page_background_image">รูปภาพ</string>
+    <string name="page_background_map">แผนที่</string>
+    <string name="map_backdrop_help">แผนที่จะตามคุณอยู่หลังวิดเจ็ต โดยแสดงคุณในพื้นที่ว่าง สไตล์เป็นแบบที่ตั้งไว้ใน การตั้งค่า → แอป → การนำทาง ถ้าไม่มีอินเทอร์เน็ตจะใช้โซนออฟไลน์ของคุณ</string>
+    <string name="map_backdrop_has_widget">หน้านี้มีวิดเจ็ตแผนที่ ถ้าใช้แผนที่เป็นพื้นหลังจะเห็นแผนที่สองอัน</string>
+    <string name="map_backdrop_remove_widget">เอาวิดเจ็ตแผนที่ออก</string>
+</resources>

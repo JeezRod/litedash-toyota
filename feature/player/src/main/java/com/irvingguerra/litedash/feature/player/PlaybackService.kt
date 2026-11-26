@@ -60,7 +60,11 @@ class PlaybackService : Service() {
             ACTION_TOGGLE -> Player.toggle()
             ACTION_NEXT -> Player.next()
             ACTION_PREVIOUS -> Player.previous()
-            ACTION_STOP -> Player.stop()
+            // Quitaron el aviso: [Player.stop] ya para el servicio; no se vuelve a pintar.
+            ACTION_STOP -> {
+                Player.stop()
+                return START_NOT_STICKY
+            }
         }
         // Arrancado con startForegroundService: Android exige startForeground aunque ya no haya
         // nada que tocar (si no, cierra la app); en ese caso se quita enseguida.
@@ -154,21 +158,27 @@ class PlaybackService : Service() {
             runCatching { context.getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(context)) }
         }
 
-        private fun notification(context: Context): Notification = with(context) {
-            val manager = getSystemService(NotificationManager::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                manager.createNotificationChannel(
+        /** El canal del aviso ya se creó en este arranque (cada play o pausa repinta el aviso). */
+        private var channelReady = false
+
+        // Los textos con el contexto de la app: ese sale en el idioma que se eligió en LiteDash (el del servicio no).
+        private fun notification(context: Context): Notification = with(context.applicationContext) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !channelReady) {
+                getSystemService(NotificationManager::class.java).createNotificationChannel(
                     NotificationChannel(CHANNEL, getString(R.string.player_channel), NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) },
                 )
+                channelReady = true
             }
             val s = Player.state
             val item = s.current
+            val shown = Player.nowShown()
             @Suppress("DEPRECATION")
             val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, CHANNEL) else Notification.Builder(context).setPriority(Notification.PRIORITY_LOW)
             builder
                 .setSmallIcon(R.drawable.ic_player_notification)
-                .setContentTitle(item?.title ?: getString(R.string.player_name))
-                .setContentText(item?.subtitle ?: "")
+                .setContentTitle(shown?.first ?: item?.title ?: getString(R.string.player_name))
+                .setContentText(shown?.second ?: item?.subtitle ?: "")
+                .setLargeIcon(shown?.third)
                 .setOngoing(s.playing)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setShowWhen(false)
@@ -183,9 +193,7 @@ class PlaybackService : Service() {
             Player.sessionToken?.let { token ->
                 builder.setStyle(Notification.MediaStyle().setMediaSession(token).setShowActionsInCompactView(0, 1, 2))
             }
-            packageManager.getLaunchIntentForPackage(packageName)?.let { open ->
-                builder.setContentIntent(PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
-            }
+            openLiteDash(context)?.let(builder::setContentIntent)
             builder.build()
         }
 
@@ -199,3 +207,11 @@ class PlaybackService : Service() {
         }
     }
 }
+
+/** Abrir LiteDash desde el aviso o la sesión; se arma una vez (solo en el hilo principal). */
+private var openIntent: PendingIntent? = null
+
+internal fun openLiteDash(context: Context): PendingIntent? = openIntent
+    ?: context.packageManager.getLaunchIntentForPackage(context.packageName)
+        ?.let { PendingIntent.getActivity(context.applicationContext, 0, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE) }
+        ?.also { openIntent = it }

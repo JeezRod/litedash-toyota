@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="road_speed">स्पीड</string>
+    <string name="road_speed_text">सिर्फ़ नंबर</string>
+    <string name="road_speed_gauge">स्पीडोमीटर</string>
+    <string name="road_speed_show">स्पीड दिखाएँ</string>
+    <string name="trip_time">समय</string>
+    <string name="trip_average">औसत</string>
+    <string name="road_trip_distance">दूरी</string>
+    <string name="trip_heading">दिशा</string>
+    <string-array name="compass_points">
+        <item>उ</item>
+        <item>उपू</item>
+        <item>पू</item>
+        <item>दपू</item>
+        <item>द</item>
+        <item>दप</item>
+        <item>प</item>
+        <item>उप</item>
+    </string-array>
+    <string name="value_with_unit">%1$s %2$s</string>
+    <string name="two_parts">%1$s · %2$s</string>
+    <string name="weather_degrees">%1$d°</string>
+    <string name="weather_range">%1$d° / %2$d°</string>
+    <string name="page_n">पेज %1$d</string>
+    <string name="page_add">पेज जोड़ें</string>
+    <string name="page_remove">पेज हटाएँ</string>
+    <string name="page_remove_question">पेज %1$d हटाएँ?</string>
+    <string name="page_remove_message">इसके विजेट हट जाएँगे; आपका पहला पेज और बाकी पेज रहेंगे।</string>
+    <string name="page_background_title">पेज %1$d का बैकग्राउंड</string>
+    <string name="page_background_image">इमेज</string>
+    <string name="page_background_map">मैप</string>
+    <string name="map_backdrop_help">मैप आपके विजेट के पीछे आपके साथ चलता है, और आप खाली जगह में दिखते हैं। इसकी स्टाइल सेटिंग्स → ऐप्स → नेविगेशन वाली है; बिना इंटरनेट यह आपके ऑफ़लाइन इलाके इस्तेमाल करता है।</string>
+    <string name="map_backdrop_has_widget">इस पेज पर मैप विजेट है: पृष्ठभूमि में मैप के साथ दो मैप दिखेंगे।</string>
+    <string name="map_backdrop_remove_widget">मैप विजेट हटाएँ</string>
+</resources>

@@ -14,6 +14,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
+import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.shadow
@@ -33,6 +34,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import kotlin.math.roundToInt
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -42,6 +44,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -51,7 +54,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -75,7 +80,12 @@ import com.irvingguerra.litedash.core.ui.Icons
 import com.irvingguerra.litedash.core.ui.Label
 import com.irvingguerra.litedash.core.ui.LocalColors
 import com.irvingguerra.litedash.core.ui.Typography
-import kotlin.concurrent.thread
+import com.irvingguerra.litedash.feature.music.FactoryAudio
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.stringResource
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Avisos del sistema para LiteDash: escucha solo mientras se ve (con otra app al frente, nada). */
 private fun Context.listen(receiver: BroadcastReceiver, action: String) =
@@ -84,7 +94,7 @@ private fun Context.listen(receiver: BroadcastReceiver, action: String) =
 /**
  * Volumen de la música en la barra: un solo botón (bocina con el nivel). Al tocarlo flota su barra
  * hacia arriba (+ barra −; a un lado en la barra lateral) y se cierra sola a los [VOLUME_OPEN_MS] sin
- * tocarla o al tocar fuera. Con el volumen del chip de la pantalla (fijo para Android) solo + y −.
+ * tocarla o al tocar fuera. Con el volumen por tecla ([SystemVolume.byKey]) solo + y −.
  */
 @Composable
 fun Volume(buttonSize: Dp, vertical: Boolean = false) {
@@ -96,7 +106,13 @@ fun Volume(buttonSize: Dp, vertical: Boolean = false) {
     var open by remember { mutableStateOf(false) }
     // Cada cambio reinicia la cuenta para cerrarse.
     var touched by remember { mutableIntStateOf(0) }
-    LifecycleStartEffect(audio) {
+    // Con el inicio tapado (estacionado, el auto en grande) no escucha: al destaparse se pone al día.
+    val covered = LocalHomeCovered.current
+    LifecycleStartEffect(audio, covered) {
+        if (covered) {
+            open = false
+            return@LifecycleStartEffect onStopOrDispose {}
+        }
         level = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) {
@@ -116,25 +132,22 @@ fun Volume(buttonSize: Dp, vertical: Boolean = false) {
             open = false
         }
     }
+    // El cambio se hace en otro hilo; el nivel de verdad llega por el aviso del sistema.
     fun adjust(direction: Int) {
         touched++
-        val before = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
-        val atEdge = if (direction == AudioManager.ADJUST_RAISE) before >= max else before <= 0
-        if (!audio.isVolumeFixed) audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, 0)
-        level = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
-        // Muchas pantallas manejan el volumen con su propio chip (Android lo tiene fijo o no lo deja
-        // cambiar: pasaba en una NWD). Entonces, la tecla de volumen como el botón físico: la toma el
-        // sistema y la lleva a ese chip (y muestra su propia barra de volumen).
-        if (level == before && !atEdge || audio.isVolumeFixed) volumeKey(if (direction == AudioManager.ADJUST_RAISE) KeyEvent.KEYCODE_VOLUME_UP else KeyEvent.KEYCODE_VOLUME_DOWN)
+        SystemVolume.adjust(context, direction)
     }
     fun set(fraction: Float) {
         touched++
         val target = (fraction * max + 0.5f).toInt().coerceIn(0, max)
         if (target == level) return
-        runCatching { audio.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0) }
-        level = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+        SystemVolume.set(context, target)
+        level = target
     }
-    val fixed = audio.isVolumeFixed
+    // Por tecla (volumen fijo o pantalla NWD): solo + y −, sin barra ni número. La familia de la pantalla se busca
+    // una vez y fuera del hilo principal; mientras, lo que ya se sepa.
+    val fixed by produceState(SystemVolume.byKeyNow(context)) { value = withContext(Dispatchers.IO) { SystemVolume.byKey(context) } }
+    val label = stringResource(R.string.bar_item_volume)
     // Dónde está la bocina en la ventana: de ahí se acomoda la barra flotante.
     var anchor by remember { mutableStateOf(Rect.Zero) }
     Box(
@@ -143,7 +156,8 @@ fun Volume(buttonSize: Dp, vertical: Boolean = false) {
             .onGloballyPositioned { anchor = it.boundsInWindow() }
             .clip(CircleShape)
             .background(if (open) c.surfaceHigh else Color.Transparent)
-            .clickable { open = !open },
+            .clickable { open = !open }
+            .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
         Icon(Icons.volume, c.text, buttonSize * 0.45f)
@@ -180,7 +194,10 @@ fun Volume(buttonSize: Dp, vertical: Boolean = false) {
                     .padding(6.dp)
                     .shadow(12.dp, RoundedCornerShape(Radius.card))
                     .clip(RoundedCornerShape(Radius.card))
-                    .background(c.surfaceHigh)
+                    // Siempre lisa: flota sobre lo que sea y, con las tarjetas de vidrio, el gris de la barra es translúcido
+                    // (no se leía). Los colores de adentro siguen siendo los de la barra.
+                    .background(if (c.surfaceHigh.alpha < 1f) c.surface else c.surfaceHigh)
+                    .border(1.dp, c.line, RoundedCornerShape(Radius.card))
                     // Tocar dentro de la píldora (fuera de sus botones) no la cierra.
                     .pointerInput(Unit) { detectTapGestures { } }
                     .padding(vertical = 8.dp, horizontal = 6.dp),
@@ -241,12 +258,97 @@ private val VOLUME_BAR_LENGTH = 160.dp
 
 
 /**
- * Aprieta la tecla de volumen dentro de la ventana de LiteDash (se permite sin permisos porque es la
- * propia app): el sistema la intercepta antes, como la del volante o la del panel. En otro hilo:
- * Instrumentation no se puede usar en el principal.
+ * El volumen de la música, uno solo para la barra y el volante. Muchas pantallas lo manejan con su propio chip
+ * (Android lo tiene fijo, o no lo deja cambiar: NWD, reporte 895416): ahí va por tecla, como el botón físico, que
+ * el sistema lleva a ese chip (y muestra su barra). En las demás, el nivel de Android y, si no cambió (en el tope,
+ * en 0 o la pantalla no lo deja), la tecla igual ([volumeKey]).
  */
-private fun volumeKey(code: Int) {
-    thread(name = "volume-key") { runCatching { Instrumentation().sendKeyDownUpSync(code) } }
+object SystemVolume {
+    /** Las teclas que LiteDash aprieta (por su hora de apretar): [WheelKeys] las deja pasar al sistema. */
+    private val injected = ArrayDeque<Long>()
+    // Todo en un solo hilo y en orden: Instrumentation no se puede usar en el principal y la familia de la pantalla
+    // se busca con varias consultas al sistema.
+    private val worker = Executors.newSingleThreadExecutor { Thread(it, "volume") }
+    @Volatile private var nwd: Boolean? = null
+    @Volatile private var mode = "-"
+    @Volatile private var last = "-"
+
+    /** Va por tecla: volumen fijo para Android o pantalla NWD. Bloquea la primera vez (busca la familia): no en el hilo principal. */
+    fun byKey(context: Context): Boolean {
+        val fixed = context.getSystemService(AudioManager::class.java).isVolumeFixed
+        val family = nwd ?: (FactoryAudio.family(context) == NWD_FAMILY).also { nwd = it }
+        mode = if (fixed) "tecla (fijo)" else if (family) "tecla (nwd)" else "stream"
+        return fixed || family
+    }
+
+    /** [byKey] sin bloquear: si la familia aún no se sabe, solo el volumen fijo. */
+    fun byKeyNow(context: Context): Boolean = context.getSystemService(AudioManager::class.java).isVolumeFixed || nwd == true
+
+    /** Sube, baja o silencia ([direction] de AudioManager); [ui] = la barra de Android (el volante). En su hilo. */
+    fun adjust(context: Context, direction: Int, ui: Boolean = false) {
+        val app = context.applicationContext
+        worker.execute {
+            val audio = app.getSystemService(AudioManager::class.java)
+            val byKey = byKey(app)
+            val before = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+            if (!byKey) runCatching { audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, if (ui) AudioManager.FLAG_SHOW_UI else 0) }
+            val after = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+            val key = volumeKey(direction, byKey, before, after)
+            val sign = when (direction) { AudioManager.ADJUST_RAISE -> "+"; AudioManager.ADJUST_LOWER -> "−"; else -> "silencio" }
+            last = "$sign $before→$after, tecla=${key?.let(::press) ?: "no"}"
+        }
+    }
+
+    /** El volumen de la música a [level] (arrastrar la barra), en su hilo: si llegan varios seguidos, solo cuenta el último. */
+    fun set(context: Context, level: Int) {
+        val app = context.applicationContext
+        if (pendingLevel.getAndSet(level) != NO_LEVEL) return
+        worker.execute {
+            val target = pendingLevel.getAndSet(NO_LEVEL)
+            runCatching { app.getSystemService(AudioManager::class.java).setStreamVolume(AudioManager.STREAM_MUSIC, target, 0) }
+        }
+    }
+    private val pendingLevel = AtomicInteger(NO_LEVEL)
+
+    /**
+     * Aprieta la tecla dentro de la ventana de LiteDash (se permite sin permisos porque es la propia app): el
+     * sistema la intercepta antes, como la del volante o la del panel. Se marca por su hora de apretar.
+     */
+    private fun press(code: Int): String {
+        val down = SystemClock.uptimeMillis()
+        synchronized(injected) {
+            injected.addLast(down)
+            while (injected.size > INJECTED_KEPT) injected.removeFirst()
+        }
+        return runCatching {
+            val i = Instrumentation()
+            i.sendKeySync(KeyEvent(down, down, KeyEvent.ACTION_DOWN, code, 0))
+            i.sendKeySync(KeyEvent(down, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, code, 0))
+        }.fold({ "enviada" }, { "error ${it.javaClass.simpleName}" })
+    }
+
+    /** ¿La apretó LiteDash? Entonces no es un botón del volante: sigue de largo al sistema. */
+    fun isOwn(event: KeyEvent): Boolean = synchronized(injected) { event.downTime in injected }
+
+    /** Para el reporte: modo, último toque y si se mandó la tecla. */
+    fun describe(): String = "Volumen: modo=$mode; último=$last"
+
+    private const val NWD_FAMILY = "nwd"
+    private const val NO_LEVEL = -1
+    private const val INJECTED_KEPT = 8
+}
+
+/**
+ * La tecla de volumen que hay que apretar para [direction] (de AudioManager), o null: por tecla ([byKey]) siempre; si
+ * no, solo si el nivel de Android no se movió ([before] = [after]) y no es silenciar (eso no mueve el nivel).
+ */
+internal fun volumeKey(direction: Int, byKey: Boolean, before: Int, after: Int): Int? {
+    if (!byKey && (direction == AudioManager.ADJUST_TOGGLE_MUTE || after != before)) return null
+    return when (direction) {
+        AudioManager.ADJUST_RAISE -> KeyEvent.KEYCODE_VOLUME_UP
+        AudioManager.ADJUST_LOWER -> KeyEvent.KEYCODE_VOLUME_DOWN
+        else -> KeyEvent.KEYCODE_VOLUME_MUTE
+    }
 }
 
 /**
@@ -272,10 +374,8 @@ fun Mute(buttonSize: Dp) {
         onStopOrDispose { context.unregisterReceiver(receiver) }
     }
     fun toggle() {
-        val before = read()
-        if (!audio.isVolumeFixed) runCatching { audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_TOGGLE_MUTE, 0) }
+        SystemVolume.adjust(context, AudioManager.ADJUST_TOGGLE_MUTE)
         muted = read()
-        if (audio.isVolumeFixed || muted == before) volumeKey(KeyEvent.KEYCODE_VOLUME_MUTE)
     }
     Box(
         Modifier.size(buttonSize).clip(CircleShape).clickable { toggle() },
@@ -292,7 +392,7 @@ private const val VOLUME_CHANGED = "android.media.VOLUME_CHANGED_ACTION"
 private const val STREAM_MUTE_CHANGED = "android.media.STREAM_MUTE_CHANGED_ACTION"
 
 /**
- * Wi-Fi o datos, audio Bluetooth conectado y ubicación encendida, en la barra.
+ * Wi-Fi o datos, audio Bluetooth conectado y ubicación encendida, en la barra de arriba.
  * Escucha al sistema solo mientras se ve (nada de revisar cada rato) y sin
  * permisos: el Bluetooth se nota por el audio conectado (tu celular, el estéreo).
  */
@@ -303,7 +403,10 @@ fun StatusIcons() {
     var network by remember { mutableStateOf<Boolean?>(null) } // true Wi-Fi, false datos, null nada
     var bluetooth by remember { mutableStateOf(false) }
     var location by remember { mutableStateOf(false) }
-    LifecycleStartEffect(Unit) {
+    // Con el inicio tapado (estacionado, el auto en grande) no escucha: al destaparse lee todo de nuevo.
+    val covered = LocalHomeCovered.current
+    LifecycleStartEffect(covered) {
+        if (covered) return@LifecycleStartEffect onStopOrDispose {}
         val connectivity = context.getSystemService(ConnectivityManager::class.java)
         // Siempre se lee la red activa: Android 6 y 7 no avisan cómo está al registrarse (solo
         // cambios) y, escuchando cualquier red, perder una no quiere decir quedarse sin internet.

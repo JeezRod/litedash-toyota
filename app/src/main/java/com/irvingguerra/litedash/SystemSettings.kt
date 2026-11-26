@@ -1,11 +1,20 @@
-// Ajustes → Sistema y Módulos: actualizaciones, Android, tu pantalla, módulos y permisos.
+// Ajustes → Acerca de y ayuda y Módulos: acerca de, Android, reportar un problema, módulos y permisos.
 package com.irvingguerra.litedash
 
+import com.irvingguerra.litedash.core.ui.LocalCardLook
+import com.irvingguerra.litedash.core.ui.skinSurface
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.Manifest
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.text.format.Formatter
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,20 +36,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.irvingguerra.litedash.core.ui.Button
@@ -57,49 +64,55 @@ import com.irvingguerra.litedash.core.ui.TextInput
 import com.irvingguerra.litedash.core.ui.Typography
 import com.irvingguerra.litedash.feature.car.CAR_ASPECT
 import com.irvingguerra.litedash.feature.car.CarStill
-import com.irvingguerra.litedash.feature.updater.Updater
-import com.irvingguerra.litedash.feature.updater.Version
-import kotlinx.coroutines.delay
+import com.irvingguerra.litedash.core.vehicle.LOCAL_NETWORK_PERMISSION
+import com.irvingguerra.litedash.core.vehicle.LOCAL_NETWORK_SDK
+import com.irvingguerra.litedash.feature.player.Library
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-/** Pestañas de Sistema; Actualizaciones va primero (ahí abre el aviso de versión nueva). */
+/** Pestañas de Acerca de y ayuda; Acerca de va primero (ahí abre el aviso de versión nueva). */
 internal enum class SystemTab(val title: Int) {
-    UPDATES(R.string.tab_updates), ANDROID(R.string.android_settings), STATS(R.string.stats_title), YOUR_SCREEN(R.string.tab_your_screen),
+    ABOUT(R.string.tab_about), ANDROID(R.string.android_settings), REPORT(R.string.tab_report_problem),
 }
 
 /**
- * Sistema: lo de LiteDash y de la pantalla en pestañas. Actualizaciones (la versión con sus
- * novedades y, en la de GitHub, buscar la siguiente), atajos a Ajustes de Android, estadísticas
- * anónimas e info de tu pantalla.
+ * Acerca de y ayuda, en pestañas: Acerca de (la versión con sus novedades, en la de GitHub buscar la siguiente, y las
+ * estadísticas anónimas), atajos a Ajustes de Android y reportar un problema (tu pantalla, código y reporte).
  */
 @Composable
 internal fun SystemSettings(d: Dependencies) {
     when (SystemTab.entries[tabs(SystemTab.entries.map { it.title }, SYSTEM_TABS).coerceAtMost(SystemTab.entries.lastIndex)]) {
-        SystemTab.UPDATES -> {
+        SystemTab.ABOUT -> {
             About(d)
-            if (d.updater.available) SettingsCard { Updates(d.updater) }
+            d.updates?.Card()
+            SettingsCard(stringResource(R.string.stats_title)) {
+                SwitchRow(stringResource(R.string.stats_switch), d.prefs.stats, { d.prefs.stats = it }, stringResource(R.string.stats_help))
+            }
         }
         SystemTab.ANDROID -> AndroidSettings()
-        SystemTab.STATS -> SettingsCard {
-            SwitchRow(stringResource(R.string.stats_switch), d.prefs.stats, { d.prefs.stats = it }, stringResource(R.string.stats_help))
-        }
-        SystemTab.YOUR_SCREEN -> ScreenInfo(d)
+        SystemTab.REPORT -> ScreenInfo(d)
     }
 }
 
-/** La pantalla en unas líneas, LiteDash Pro ([ProCard]) y "Enviar un reporte" ([SendReport]). */
+/**
+ * La pantalla en unas líneas, «Código de desarrollador» ([ProCard]) y "Enviar un reporte" ([SendReport]). Si se
+ * pidió un reporte ya elegido (sonido o mapa), la tarjeta del reporte va primero (abajo no se vería en pantallas bajitas).
+ */
 @Composable
 private fun ScreenInfo(d: Dependencies) {
     val context = LocalContext.current
+    val reportFirst = remember { reportPending() }
+    if (reportFirst) SendReport(d)
     SettingsCard {
         val lines = remember { screenLines(context) }
         for (line in lines) Label(line, Typography.body, maxLines = 2)
     }
     ProCard(d.pro)
-    SendReport(d.music, d.pro, d.dashboard, d::obdIfCreated) { d.phone.describe() }
+    if (!reportFirst) SendReport(d)
 }
 
-/** LiteDash Pro en prueba: activarlo con un código o, si ya está, quitarlo de esta pantalla (solo lo local). */
+/** «Código de desarrollador»: activarlo con un código o, si ya está, quitarlo de esta pantalla (solo lo local). */
 @Composable
 private fun ProCard(pro: ProAccess) {
     val c = LocalColors.current
@@ -134,8 +147,8 @@ private fun ProCard(pro: ProAccess) {
                         checking = false
                     }
                 },
-                Modifier.graphicsLayer { alpha = if (idle) 1f else 0.45f },
                 primary = true,
+                enabled = idle,
             )
             (error ?: R.string.pro_expired.takeIf { pro.expired })?.let { Label(stringResource(it), Typography.small, c.danger) }
         }
@@ -158,10 +171,11 @@ private fun About(d: Dependencies) {
             }
             Column(Modifier.padding(22.dp).fillMaxWidth(if (pkg != null && wide) 0.56f else 1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Label("LiteDash ${BuildConfig.VERSION_NAME}", Typography.title.copy(fontSize = 30.sp), maxLines = 1)
-                Label(BuildConfig.CHANNEL, Typography.small, c.textMuted)
-                if (BuildConfig.RELEASE_NOTES.isNotBlank()) {
+                Label(stringResource(if (BuildConfig.CHANNEL == "play") R.string.channel_play else R.string.channel_github), Typography.small, c.textMuted)
+                val notes = localReleaseNotes(BuildConfig.RELEASE_NOTES, BuildConfig.RELEASE_NOTES_EN)
+                if (notes.isNotBlank()) {
                     Label(stringResource(R.string.release_notes), Typography.label, c.textMuted)
-                    for (line in remember { releaseNotes() }) {
+                    for (line in remember(notes) { releaseNotes(notes) }) {
                         if (line.startsWith("###")) Label(line.removePrefix("###").trim(), Typography.subtitle, maxLines = 1)
                         else Label("• $line", Typography.small)
                     }
@@ -173,12 +187,12 @@ private fun About(d: Dependencies) {
 
 /**
  * Módulos, en dos pestañas. Módulos: cada uno con su interruptor y, prendido, una flecha a sus
- * ajustes; apagado en gris, no corre ni pide nada y desaparece de todo. Permisos: los que se dan
- * con Android (avisos de otras apps y ubicación), con el mismo interruptor.
+ * ajustes (el clima no tiene); apagado en gris, no corre ni pide nada y desaparece de todo. Permisos: los que se dan
+ * con Android, con el mismo interruptor.
  */
 @Composable
 internal fun Modules(d: Dependencies, revision: Int, open: (SettingsSection) -> Unit) {
-    val permissions = tabs(listOf(R.string.modules, R.string.tab_permissions), "modules") == 1
+    val permissions = tabs(listOf(R.string.modules, R.string.tab_permissions), MODULES_TABS) == 1
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (permissions) return@Column Permissions(d, revision)
         ModuleRow(Icons.engine, stringResource(R.string.module_obd), d.obdModule, { d.obdModule = it }) { open(SettingsSection.WORKSHOP) }
@@ -189,25 +203,59 @@ internal fun Modules(d: Dependencies, revision: Int, open: (SettingsSection) -> 
             if (!on) tpms.source = null
             else tpms.lastSource?.let { tpms.source = it } ?: open(SettingsSection.TIRES)
         }) { open(SettingsSection.TIRES) }
-        ModuleRow(Icons.car, stringResource(R.string.module_cameras), on = false, onChange = null, soon = true)
+        // Clima: al prenderlo pide la ubicación aproximada (y lo trae al momento); apagado no usa ni red ni ubicación.
+        val enableWeather = rememberEnableWeather(d.weather)
+        ModuleRow(Icons.sun, stringResource(R.string.weather_switch), d.weather.enabled, { on -> if (on) enableWeather() else d.weather.disable() })
     }
 }
 
+/** Las pestañas de Módulos (Módulos 0, Permisos 1). */
+private const val MODULES_TABS = "modules"
+
 /**
  * Módulos → Permisos: prender los pide; apagar solo se puede en Ajustes de Android. [revision]
- * cambia al volver a la app: lo que se dio o quitó allá se nota al regresar.
+ * cambia al volver a la app: lo que se dio o quitó allá se nota al regresar. Solo los que existen en esta versión de
+ * Android, y nunca se piden al abrir: solo al tocar su renglón.
  */
 @Composable
 private fun Permissions(d: Dependencies, revision: Int) {
     val context = LocalContext.current
     val notifications = remember(revision) { d.music.hasPermission() }
     val (location, askLocation) = rememberGpsPermission(d, revision)
-    ModuleRow(Icons.bell, stringResource(R.string.module_notifications), notifications, { on ->
-        if (on) d.music.requestPermission() else openAppSettings(context)
-    })
+    // El acceso a notificaciones no está en la información de la app: se da y se quita en su propia pantalla de Android.
+    ModuleRow(Icons.bell, stringResource(R.string.module_notifications), notifications, { d.music.requestPermission() })
     ModuleRow(Icons.location, stringResource(R.string.module_location), location, { on ->
         if (on) askLocation() else openAppSettings(context)
     })
+    // Bluetooth (dispositivos cercanos): desde Android 12 es un permiso que se pide; antes viene dado al instalar.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val nearby = listOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
+        PermissionRow(Icons.bluetooth, stringResource(R.string.module_bluetooth), nearby, revision)
+    }
+    // La red local (celular con Connect, OBD por Wi‑Fi): desde Android 17. Al darla, el enlace con el celular busca de una vez.
+    if (Build.VERSION.SDK_INT >= LOCAL_NETWORK_SDK) {
+        PermissionRow(Icons.wifi, stringResource(R.string.module_local_network), listOf(LOCAL_NETWORK_PERMISSION), revision) {
+            d.phoneIfCreated()?.permissionChanged()
+        }
+    }
+    // Tu música en la memoria o el USB (y, hasta Android 12, las fotos del explorador propio).
+    PermissionRow(Icons.music, stringResource(R.string.module_files), listOf(Library.permission), revision)
+}
+
+/**
+ * Un permiso de Android ([permissions], todos juntos) como renglón: dice si está dado y solo lo pide al tocarlo; quitarlo
+ * se hace en Ajustes de Android. [onGranted]: quien lo usaba se entera al momento.
+ */
+@Composable
+private fun PermissionRow(icon: ImageVector, title: String, permissions: List<String>, revision: Int, onGranted: () -> Unit = {}) {
+    val context = LocalContext.current
+    fun granted() = permissions.all { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+    var on by remember(revision) { mutableStateOf(granted()) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        on = granted()
+        if (on) onGranted()
+    }
+    ModuleRow(icon, title, on, { want -> if (want) launcher.launch(permissions.toTypedArray()) else openAppSettings(context) })
 }
 
 /**
@@ -219,42 +267,76 @@ private fun Permissions(d: Dependencies, revision: Int) {
 private fun AndroidSettings() {
     val c = LocalColors.current
     val context = LocalContext.current
-    val shortcuts = remember {
-        listOf(
-            R.string.sys_all to Settings.ACTION_SETTINGS,
-            R.string.sys_bluetooth to Settings.ACTION_BLUETOOTH_SETTINGS,
-            R.string.sys_wifi to Settings.ACTION_WIFI_SETTINGS,
-            R.string.sys_location to Settings.ACTION_LOCATION_SOURCE_SETTINGS,
-            R.string.sys_display to Settings.ACTION_DISPLAY_SETTINGS,
-            R.string.sys_sound to Settings.ACTION_SOUND_SETTINGS,
-            R.string.sys_apps to Settings.ACTION_APPLICATION_SETTINGS,
-            R.string.sys_date to Settings.ACTION_DATE_SETTINGS,
-            R.string.sys_language to Settings.ACTION_LOCALE_SETTINGS,
-            R.string.sys_home to Settings.ACTION_HOME_SETTINGS,
-        ).filter { (_, action) -> Intent(action).resolveActivity(context.packageManager) != null }
-    }
+    // Preguntar a Android cuáles abren es una consulta entre procesos: fuera del hilo principal.
+    val shortcuts by produceState<List<Pair<Int, String>>?>(null) { value = withContext(Dispatchers.IO) { systemShortcuts(context) } }
     SettingsCard(stringResource(R.string.android_settings), stringResource(R.string.android_settings_help)) {
+        val list = shortcuts ?: return@SettingsCard
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            for ((name, action) in shortcuts) {
+            for ((name, action) in list) {
                 Button(stringResource(name), { openSystemScreen(context, Intent(action)) }, primary = action == Settings.ACTION_SETTINGS)
             }
         }
-        if (shortcuts.isEmpty()) Label(stringResource(R.string.android_settings_none), Typography.small, c.textMuted)
+        if (list.isEmpty()) Label(stringResource(R.string.android_settings_none), Typography.small, c.textMuted)
     }
 }
 
-/** Abre una pantalla de los ajustes de Android; falso si la pantalla no la tiene (o no deja abrirla). */
-internal fun openSystemScreen(context: Context, intent: Intent): Boolean =
-    runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+/** Los atajos que esta pantalla sí abre. */
+private fun systemShortcuts(context: Context): List<Pair<Int, String>> =
+    listOf(
+        R.string.sys_all to Settings.ACTION_SETTINGS,
+        R.string.sys_bluetooth to Settings.ACTION_BLUETOOTH_SETTINGS,
+        R.string.sys_wifi to Settings.ACTION_WIFI_SETTINGS,
+        R.string.sys_location to Settings.ACTION_LOCATION_SOURCE_SETTINGS,
+        R.string.sys_display to Settings.ACTION_DISPLAY_SETTINGS,
+        R.string.sys_sound to Settings.ACTION_SOUND_SETTINGS,
+        R.string.installed_apps to Settings.ACTION_APPLICATION_SETTINGS,
+        R.string.sys_date to Settings.ACTION_DATE_SETTINGS,
+        R.string.sys_language to Settings.ACTION_LOCALE_SETTINGS,
+        R.string.sys_home to Settings.ACTION_HOME_SETTINGS,
+    ).filter { (_, action) -> Intent(action).resolveActivity(context.packageManager) != null }
 
-/** Los permisos de LiteDash en Ajustes de Android (para dar o quitar ubicación). */
+/** Abre una pantalla de los ajustes de Android; falso si la pantalla no la tiene (o no deja abrirla). */
+internal fun openSystemScreen(context: Context, intent: Intent): Boolean = try {
+    context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    true
+} catch (e: ActivityNotFoundException) {
+    Log.w("SystemSettings", "sin pantalla para ${intent.action}", e)
+    false
+} catch (e: SecurityException) {
+    Log.w("SystemSettings", "no deja abrir ${intent.action}", e)
+    false
+}
+
+/** Una pantalla de Ajustes de Android sobre una app ([action], p. ej. sus permisos): de LiteDash si no se dice [pkg]. */
+internal fun appSettingsIntent(context: Context, action: String, pkg: String = context.packageName): Intent =
+    Intent(action, Uri.fromParts("package", pkg, null))
+
+/** Los permisos de LiteDash en Ajustes de Android (ubicación, red local…). */
 internal fun openAppSettings(context: Context) {
-    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
-    openSystemScreen(context, intent)
+    openSystemScreen(context, appSettingsIntent(context, Settings.ACTION_APPLICATION_DETAILS_SETTINGS))
+}
+
+/**
+ * Las notas en el idioma de la app: en español si la app está en español; si no, en inglés ([english]) cuando las hay.
+ * Las del Release de GitHub traen las dos, separadas por [RELEASE_NOTES_EN_MARK] ([splitReleaseNotes]).
+ */
+@Composable
+internal fun localReleaseNotes(spanish: String, english: String): String {
+    val inSpanish = currentLocale().language == "es"
+    return if (inSpanish || english.isBlank()) spanish else english
+}
+
+/** Lo que separa las notas en español de las de inglés en un Release (comentario HTML: no se ve en GitHub). */
+internal const val RELEASE_NOTES_EN_MARK = "<!-- en -->"
+
+/** (español, inglés) de las notas de un Release; sin la marca, todo es español. El pie (tras "---") no es parte de ellas. */
+internal fun splitReleaseNotes(notes: String): Pair<String, String> {
+    val body = notes.substringBefore("\n---")
+    return body.substringBefore(RELEASE_NOTES_EN_MARK) to body.substringAfter(RELEASE_NOTES_EN_MARK, "")
 }
 
 /** Notas de una versión (sección del CHANGELOG) en renglones: títulos ("### Agregado") y viñetas sin formato. */
-private fun releaseNotes(notes: String = BuildConfig.RELEASE_NOTES): List<String> {
+internal fun releaseNotes(notes: String = BuildConfig.RELEASE_NOTES): List<String> {
     val items = mutableListOf<String>()
     for (raw in notes.lines()) {
         val line = raw.trim()
@@ -268,124 +350,26 @@ private fun releaseNotes(notes: String = BuildConfig.RELEASE_NOTES): List<String
     return items.map { it.replace("**", "") }
 }
 
-/** Lo básico de la pantalla: equipo, Android, resolución y memoria (sin etiquetas: se entienden solos). */
+/** Lo básico de la pantalla, sin jerga: equipo, Android, resolución y memoria (lo técnico va solo en el reporte). */
 private fun screenLines(context: Context): List<String> {
     val m = context.resources.displayMetrics
     return listOf(
-        "${Build.MANUFACTURER} ${Build.MODEL} (${Build.DEVICE}) · ${Build.HARDWARE}",
-        "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.SUPPORTED_ABIS.joinToString()}",
-        "${m.widthPixels}×${m.heightPixels} px · ${m.densityDpi} dpi · ${memoryMb(context)} MB",
+        "${Build.MANUFACTURER} ${Build.MODEL}",
+        "Android ${Build.VERSION.RELEASE}",
+        "${m.widthPixels}×${m.heightPixels} · ${Formatter.formatShortFileSize(context, memoryBytes(context))}",
     )
-}
-
-/** Cuánto se espera la confirmación de Android antes de ofrecer el instalador de siempre. */
-private const val INSTALLER_WAIT_MS = 8_000L
-
-/** Estados del botón de actualizaciones (solo versión de GitHub). */
-private sealed interface UpdateState {
-    data object Idle : UpdateState
-    data object Checking : UpdateState
-    data object UpToDate : UpdateState
-    data class Available(val v: Version) : UpdateState
-    data class NeedsPermission(val v: Version) : UpdateState
-    data object Error : UpdateState
-}
-
-@Composable
-private fun Updates(a: Updater) {
-    val c = LocalColors.current
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    // La confirmación de Android ("¿Instalar?") la abre esta pantalla, que está al frente.
-    val confirm = Updater.confirm
-    LaunchedEffect(confirm) {
-        if (confirm == null) return@LaunchedEffect
-        Updater.confirm = null
-        runCatching { context.startActivity(confirm) }
-    }
-    // Si al abrir ya se encontró una versión nueva, se muestra de una vez.
-    var state by remember { mutableStateOf(a.found?.let { UpdateState.Available(it) } ?: UpdateState.Idle) }
-
-    fun install(v: Version) {
-        if (!a.canInstall()) {
-            state = UpdateState.NeedsPermission(v)
-            a.requestInstallPermission()
-            return
-        }
-        // La descarga vive en el Updater: sigue aunque se cierre Ajustes.
-        a.downloadAndInstall(v)
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        when (val p = a.progress) {
-            is Updater.Progress.Downloading -> Label(stringResource(R.string.downloading, p.percent), Typography.body, c.accent)
-            is Updater.Progress.Installing -> {
-                Label(stringResource(R.string.installing), Typography.body, c.accent)
-                // Si la confirmación de Android no aparece en unos segundos (o falla), el respaldo.
-                var stuck by remember(p) { mutableStateOf(false) }
-                LaunchedEffect(p) {
-                    delay(INSTALLER_WAIT_MS)
-                    stuck = true
-                }
-                if (stuck || Updater.installError != null) {
-                    Button(stringResource(R.string.open_installer), { a.openWithInstaller(p.apk) }, primary = true)
-                }
-            }
-            // Sin descarga en curso: buscar, la versión encontrada o el permiso de instalar.
-            else -> when (val e = state) {
-                UpdateState.Idle, UpdateState.UpToDate, UpdateState.Error -> {
-                    Button(stringResource(R.string.check_updates), {
-                        state = UpdateState.Checking
-                        scope.launch {
-                            state = runCatching { a.checkForUpdate() }
-                                .fold({ v -> if (v == null) UpdateState.UpToDate else UpdateState.Available(v) }, { UpdateState.Error })
-                        }
-                    })
-                    if (e == UpdateState.UpToDate) Label(stringResource(R.string.up_to_date), Typography.small, c.accent)
-                }
-                UpdateState.Checking -> Label(stringResource(R.string.checking), Typography.body, c.textMuted)
-                is UpdateState.Available -> NewVersion(e.v) { install(e.v) }
-                is UpdateState.NeedsPermission -> {
-                    Label(stringResource(R.string.install_permission), Typography.small, c.textMuted)
-                    Button(stringResource(R.string.already_allowed), { install(e.v) }, primary = true)
-                }
-            }
-        }
-        // Falló la búsqueda o la última descarga (cada una con su aviso: no es lo mismo no revisar que no bajar).
-        if (a.progress == Updater.Progress.Failed) Label(stringResource(R.string.update_download_error), Typography.small, c.danger)
-        else if (state == UpdateState.Error) Label(stringResource(R.string.update_error), Typography.small, c.danger)
-        Updater.installError?.let { Label(stringResource(R.string.install_error, it), Typography.small, c.danger) }
-    }
-}
-
-@Composable
-private fun NewVersion(v: Version, onInstall: () -> Unit) {
-    val c = LocalColors.current
-    val shape = RoundedCornerShape(Radius.card)
-    Column(
-        Modifier.fillMaxWidth().clip(shape).background(c.surface).border(1.dp, c.accent, shape).padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Label(stringResource(R.string.new_version, v.name), Typography.subtitle)
-        // Las notas del Release como lista corta (sin los títulos de sección).
-        val notes = releaseNotes(v.notes).filterNot { it.startsWith("###") }.take(6).joinToString("\n") { "• $it" }
-        if (notes.isNotBlank()) Label(notes, Typography.small, c.textMuted, maxLines = 8)
-        Button(stringResource(R.string.download_install, v.bytes / 1e6f), onInstall, primary = true)
-    }
 }
 
 /**
  * Un módulo: ícono, nombre e interruptor (todo eso se toca para prender o apagar) y, prendido y
- * con [onOpen], una flecha redonda aparte que entra a sus ajustes. Apagado, en gris. [soon]: aún
- * no existe (interruptor apagado sin tocar y la etiqueta "Pronto").
+ * con [onOpen], una flecha redonda aparte que entra a sus ajustes. Apagado, en gris.
  */
 @Composable
 private fun ModuleRow(
     icon: ImageVector,
     title: String,
     on: Boolean,
-    onChange: ((Boolean) -> Unit)?,
-    soon: Boolean = false,
+    onChange: (Boolean) -> Unit,
     onOpen: (() -> Unit)? = null,
 ) {
     val c = LocalColors.current
@@ -395,40 +379,21 @@ private fun ModuleRow(
     // Angosto (celular): todo más junto y el nombre en dos renglones, para que no se corte.
     val narrow = maxWidth < MODULE_NARROW
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 76.dp).height(IntrinsicSize.Min).clip(shape).background(c.surface).border(1.dp, c.line, shape),
+        Modifier.fillMaxWidth().heightIn(min = 76.dp).height(IntrinsicSize.Min).clip(shape).skinSurface(LocalCardLook.current, c, shape),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
             Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                .then(if (onChange != null) Modifier.clickable { onChange(!on) } else Modifier)
+                .clickable { onChange(!on) }
                 .padding(start = if (narrow) 14.dp else 20.dp, end = if (narrow) 10.dp else 16.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(if (narrow) 12.dp else 16.dp),
         ) {
             Icon(icon, if (on) c.accent else c.textMuted.copy(alpha = dim), if (narrow) 24.dp else 28.dp)
-            val name: @Composable (Modifier) -> Unit = {
-                Label(title, Typography.subtitle, if (on) c.text else c.textMuted.copy(alpha = dim), maxLines = if (narrow) 2 else 1, modifier = it)
-            }
-            val badge: @Composable () -> Unit = {
-                if (soon) Label(
-                    stringResource(R.string.module_soon),
-                    Typography.small.copy(fontWeight = FontWeight.SemiBold),
-                    c.textMuted,
-                    maxLines = 1,
-                    modifier = Modifier.clip(RoundedCornerShape(50)).background(c.surfaceHigh).padding(horizontal = 10.dp, vertical = 4.dp),
-                )
-            }
-            // Angosto, la etiqueta va debajo del nombre (a un lado lo partía a media palabra).
-            if (narrow) Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                name(Modifier)
-                badge()
-            } else Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                name(Modifier.weight(1f, fill = false))
-                badge()
-            }
-            Switch(on, Modifier.graphicsLayer { alpha = if (soon) 0.45f else 1f })
+            Label(title, Typography.subtitle, if (on) c.text else c.textMuted.copy(alpha = dim), maxLines = if (narrow) 2 else 1, modifier = Modifier.weight(1f))
+            Switch(on)
         }
         // La flecha va aparte (con su línea): entrar no prende ni apaga nada.
         Box(Modifier.width(if (narrow) 60.dp else 76.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {

@@ -28,8 +28,6 @@ internal class TopWayRadio(onState: (BroadcastMeta) -> Unit, private val trace: 
     private var band = 0
     /** "FM 91.1"; null si no ha dicho. */
     override val station get() = stationText(band == BAND_AM, frequency)
-    // audioAt: cuándo dijo el sintonizador que tiene el audio (769 = 1), para confirmar un play. La
-    // "actividad" no sirve: el enlace reparte lo que se escribe, así que llegaría la nuestra.
     /** El número de la radio en "actividad" y fuente: 1 en las TS18 (ivvlev/CarRadio); se aprende de lo que manda. */
     private var source = SOURCE_RADIO
     private val seen = HashSet<Int>()
@@ -49,6 +47,7 @@ internal class TopWayRadio(onState: (BroadcastMeta) -> Unit, private val trace: 
                 }
                 // Actividad: el número de la radio al entrar (1 o 0x0A) y con 0x80 al salir (0x81 o 0x8A).
                 m.what == ACTIVITY -> {
+                    onActivity?.invoke(m.arg1)
                     val radio = m.arg1 == SOURCE_RADIO || m.arg1 == SOURCE_RADIO_ALT
                     if (radio) source = m.arg1
                     on = radio
@@ -60,6 +59,9 @@ internal class TopWayRadio(onState: (BroadcastMeta) -> Unit, private val trace: 
     }
 
     override val open get() = util != null
+
+    /** Cada "actividad" que manda el MCU (quién tiene el audio), en el hilo principal; la usa la receta del Bluetooth. */
+    var onActivity: ((Int) -> Unit)? = null
 
     /** Se conecta al sintonizador y le pide la estación. False si la pantalla no lo deja. */
     override fun open(): Boolean {
@@ -174,7 +176,7 @@ internal class TopWayRadio(onState: (BroadcastMeta) -> Unit, private val trace: 
         /** El número de la radio en otras TopWay (OpenRath). */
         private const val SOURCE_RADIO_ALT = 0x0A
         /** La música del Bluetooth de fábrica (`com.tw.bt`). */
-        private const val SOURCE_BT = 8
+        const val SOURCE_BT = 8
         private const val RELEASE = 0x80
         private const val BAND_AM = 2
 
@@ -183,6 +185,16 @@ internal class TopWayRadio(onState: (BroadcastMeta) -> Unit, private val trace: 
 
         /** Alguna vez la app de la pantalla se cerró al abrir el enlace (desde entonces ya no se abre). */
         fun crashedBefore(store: SharedPreferences) = store.getBoolean(KEY_OPENING, false)
+
+        /**
+         * Para los reportes (si la pantalla trae el enlace): el perfil abierto ([radio]), si la app se cerró alguna vez al
+         * abrirlo y si se pidió la fuente del Bluetooth ([bluetoothRecipe] = la receta aplicada).
+         */
+        fun describe(store: SharedPreferences, radio: TopWayRadio?, bluetoothRecipe: String?): String =
+            "TopWay: abierto=${yes(radio?.open == true)} estación=${radio?.station ?: "-"} " +
+                "nombre=${radio?.name?.ifEmpty { "-" } ?: "-"} audio=${radio?.on?.let(::yes) ?: "?"} " +
+                "se cerró=${yes(crashedBefore(store))} " +
+                "fuente bluetooth=${if (bluetoothRecipe == Recipes.TW_SOURCE8) "pedida" else "no"}"
 
         /**
          * Abre un enlace con seguro: se marca antes de abrir (y queda escrito ya) y se quita al terminar; si el

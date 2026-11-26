@@ -1,7 +1,6 @@
 package com.irvingguerra.litedash
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -34,6 +33,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.irvingguerra.litedash.core.ui.Divider
 import com.irvingguerra.litedash.core.ui.Button
 import com.irvingguerra.litedash.core.ui.Card
 import com.irvingguerra.litedash.core.ui.Label
@@ -44,8 +44,6 @@ import com.irvingguerra.litedash.core.ui.fitFont
 import com.irvingguerra.litedash.core.vehicle.Signal
 import com.irvingguerra.litedash.core.vehicle.watch
 import com.irvingguerra.litedash.feature.car.CAR_TOP_ASPECT
-import com.irvingguerra.litedash.feature.car.CarPackage
-import com.irvingguerra.litedash.feature.car.CarTop
 import com.irvingguerra.litedash.feature.obd.EngineReport
 import com.irvingguerra.litedash.feature.obd.HealthLevel
 import com.irvingguerra.litedash.feature.obd.ObdState
@@ -54,6 +52,8 @@ import com.irvingguerra.litedash.feature.obd.Zone
 import com.irvingguerra.litedash.feature.obd.engineAlert
 import com.irvingguerra.litedash.feature.obd.healthOf
 import com.irvingguerra.litedash.feature.obd.issues
+import java.text.DecimalFormat
+import java.text.NumberFormat
 import kotlin.math.roundToInt
 
 /** Las partes que siempre se listan; ruedas y carrocería solo cuando algo las señala. */
@@ -69,7 +69,6 @@ private val MAIN_ZONES = listOf(Zone.ENGINE, Zone.INTAKE, Zone.COOLING, Zone.BAT
 @Composable
 fun HealthView(
     d: Dependencies,
-    car: CarPackage?,
     report: EngineReport?,
     connected: Boolean,
     reading: Boolean = false,
@@ -90,12 +89,12 @@ fun HealthView(
             }
             if (wide) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-                    CarWithMarks(d, car, health, Modifier.padding(horizontal = 12.dp).height(carHeight))
+                    CarWithMarks(d, health, Modifier.padding(horizontal = 12.dp).height(carHeight))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) { details() }
                 }
             } else {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    CarWithMarks(d, car, health, Modifier.height(carHeight))
+                    CarWithMarks(d, health, Modifier.height(carHeight))
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) { details() }
                 }
             }
@@ -153,16 +152,17 @@ private fun Summary(d: Dependencies, health: List<SystemHealth>, report: EngineR
     val (text, color) = when {
         !connected -> stringResource(R.string.health_connect) to c.textMuted
         reading && !known -> stringResource(R.string.obd_reading) to c.textMuted
-        issues == 0 && known -> stringResource(R.string.health_all_good) to Good
+        issues == 0 && known -> stringResource(R.string.health_all_good) to c.good
         issues > 0 -> pluralStringResource(R.plurals.health_issues, issues, issues) to (if (fault) c.danger else c.warning)
         else -> stringResource(R.string.health_unknown) to c.textMuted
     }
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Label(stringResource(R.string.health_title).uppercase(), Typography.label, c.textMuted, maxLines = 1)
+        Label(stringResource(R.string.health_title).uppercase(currentLocale()), Typography.label, c.textMuted, maxLines = 1)
         Label(text, Typography.title.copy(fontSize = if (connected) 30.sp else 20.sp), color, maxLines = 2)
         if (connected) {
             val obd = d.obd
-            val line = listOfNotNull(obd.target?.name, obd.adapter, report?.vin?.let { "VIN $it" }).joinToString(" · ")
+            val vin = report?.vin?.let { stringResource(R.string.health_vin, it) }
+            val line = listOfNotNull(obd.target?.name, obd.adapter, vin).joinToString(" · ")
             if (line.isNotEmpty()) Label(line, Typography.small, c.textMuted, maxLines = 1)
         }
     }
@@ -196,7 +196,7 @@ private fun signalOf(zone: Zone) = when (zone) {
 private fun SystemTile(d: Dependencies, h: SystemHealth, report: EngineReport?, connected: Boolean, onCodes: () -> Unit, modifier: Modifier) {
     val c = LocalColors.current
     val color = when (h.level) {
-        HealthLevel.GOOD -> Good
+        HealthLevel.GOOD -> c.good
         HealthLevel.WARN -> c.warning
         HealthLevel.FAULT -> c.danger
         HealthLevel.UNKNOWN -> c.textMuted
@@ -216,11 +216,11 @@ private fun SystemTile(d: Dependencies, h: SystemHealth, report: EngineReport?, 
     val readiness = report?.readiness
     val detail = when {
         h.codes.isNotEmpty() -> h.codes.joinToString(" · ")
-        h.pendingCodes.isNotEmpty() -> h.pendingCodes.joinToString(" · ") + " · " + stringResource(R.string.health_pending)
+        h.pendingCodes.isNotEmpty() -> stringResource(R.string.two_parts, h.pendingCodes.joinToString(" · "), stringResource(R.string.health_pending))
         h.level == HealthLevel.WARN && h.alert == null -> stringResource(R.string.health_mil)
         h.alert != null && value != null && signal != null -> sensorText(signal, value, units, locale)
         h.zone == Zone.EXHAUST && readiness != null ->
-            stringResource(R.string.health_monitors, readiness.monitors.count { it.complete }, readiness.monitors.size)
+            pluralStringResource(R.plurals.health_monitors, readiness.monitors.size, readiness.monitors.count { it.complete }, readiness.monitors.size)
         else -> null
     }
     val series = if (connected && signal != null) rememberSeries(d, signal) else null
@@ -230,7 +230,7 @@ private fun SystemTile(d: Dependencies, h: SystemHealth, report: EngineReport?, 
         value = word,
         modifier = modifier,
         valueColor = when (h.level) {
-            HealthLevel.GOOD -> if (value != null) c.text else Good
+            HealthLevel.GOOD -> if (value != null) c.text else c.good
             HealthLevel.UNKNOWN -> c.textMuted
             else -> color
         },
@@ -245,18 +245,18 @@ private fun SystemTile(d: Dependencies, h: SystemHealth, report: EngineReport?, 
 
 /**
  * Tu auto desde arriba (su render, o la silueta si el paquete no la trae), del mismo color que
- * en Llantas, con los puntos de atención. El punto late despacio solo si hay una falla; sin
- * fallas nada se mueve.
+ * en Llantas, con los puntos de atención. Con [pulsing] (la pantalla Salud, abierta a propósito) el punto de una falla
+ * late despacio; en el inicio va fijo: una falla guardada puede durar semanas y nada se anima en reposo.
  */
 @Composable
-private fun CarWithMarks(d: Dependencies, car: CarPackage?, health: List<SystemHealth>, modifier: Modifier) {
+private fun CarWithMarks(d: Dependencies, health: List<SystemHealth>, modifier: Modifier, pulsing: Boolean = true) {
     val c = LocalColors.current
     val marks = health.filter { it.level == HealthLevel.WARN || it.level == HealthLevel.FAULT }.map {
         val fault = it.level == HealthLevel.FAULT
-        ProblemMark(it.zone.x, it.zone.y, if (fault) c.danger else c.warning, pulsing = fault)
+        ProblemMark(it.zone.x, it.zone.y, if (fault) c.danger else c.warning, pulsing = pulsing && fault)
     }
     Box(modifier.aspectRatio(CAR_TOP_ASPECT)) {
-        CarTop(d.cars, car, d.prefs.carColor, Modifier.fillMaxSize())
+        MyCarTop(d, Modifier.fillMaxSize())
         ProblemMarks(marks, Modifier.fillMaxSize())
     }
 }
@@ -283,7 +283,7 @@ private fun EngineReport.codeCount() = (stored + pending + permanent).distinct()
  * Un toque abre el Taller.
  */
 @Composable
-fun HealthTile(d: Dependencies, car: CarPackage?, showCar: Boolean = true, onClick: () -> Unit) {
+fun HealthTile(d: Dependencies, showCar: Boolean = true, onClick: () -> Unit) {
     val c = LocalColors.current
     // Con un adaptador guardado se conecta sola (como los medidores), sin abrir el Taller.
     val obd = rememberObd(d)
@@ -299,7 +299,7 @@ fun HealthTile(d: Dependencies, car: CarPackage?, showCar: Boolean = true, onCli
     val (status, statusColor) = when {
         obd?.state == ObdState.CONNECTING -> stringResource(R.string.obd_connecting_short) to c.textMuted
         connected && issues > 0 -> pluralStringResource(R.plurals.health_issues, issues, issues) to (if (fault) c.danger else c.warning)
-        connected && known -> stringResource(R.string.health_all_good) to Good
+        connected && known -> stringResource(R.string.health_all_good) to c.good
         connected -> stringResource(R.string.obd_reading) to c.textMuted
         else -> stringResource(R.string.health_offline) to c.textMuted
     }
@@ -309,7 +309,7 @@ fun HealthTile(d: Dependencies, car: CarPackage?, showCar: Boolean = true, onCli
         score == null -> c.textMuted
         fault -> c.danger
         issues > 0 -> c.warning
-        else -> Good
+        else -> c.good
     }
     val codes = report?.codeCount()
     val line = when {
@@ -327,7 +327,7 @@ fun HealthTile(d: Dependencies, car: CarPackage?, showCar: Boolean = true, onCli
                 Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                     HealthRing(score, scoreColor, Modifier.size(smallRing))
                     Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                        Label(stringResource(R.string.workshop).uppercase(), Typography.label, c.textMuted, maxLines = 1)
+                        Label(stringResource(R.string.workshop).uppercase(currentLocale()), Typography.label, c.textMuted, maxLines = 1)
                         Label(status, Typography.small, statusColor, maxLines = 1)
                     }
                 }
@@ -362,11 +362,11 @@ fun HealthTile(d: Dependencies, car: CarPackage?, showCar: Boolean = true, onCli
                             Label(stringResource(R.string.health_engine), Typography.subtitle, maxLines = 1)
                             Label(line, Typography.small, if (codes != null && codes > 0) scoreColor else c.textMuted, maxLines = 2)
                         }
-                        if (withCar) CarWithMarks(d, car, health, Modifier.fillMaxHeight())
+                        if (withCar) CarWithMarks(d, health, Modifier.fillMaxHeight(), pulsing = false)
                     }
                 }
                 if (stats) {
-                    Box(Modifier.padding(vertical = 10.dp).fillMaxWidth().height(1.dp).background(c.line))
+                    Divider(Modifier.padding(vertical = 10.dp))
                     HealthStats(d, report, connected, codes, if (codes != null && codes > 0) scoreColor else c.text)
                 }
             }
@@ -387,18 +387,25 @@ private fun HealthRing(score: Float?, color: Color, modifier: Modifier) {
             drawArc(track, -90f, 360f, false, Offset(inset, inset), box, style = Stroke(stroke))
             if (score != null && score > 0f) drawArc(color, -90f, 360f * score, false, Offset(inset, inset), box, style = Stroke(stroke, cap = StrokeCap.Round))
         }
-        val text = score?.let { (it * 100).roundToInt().toString() } ?: "—"
+        val locale = currentLocale()
+        // Con los dígitos del idioma, y el "%" donde lo pone (antes en turco, después en casi todos).
+        val text = score?.let { String.format(locale, "%d", (it * 100).roundToInt()) } ?: "—"
+        val percentFirst = remember(locale) { (NumberFormat.getPercentInstance(locale) as? DecimalFormat)?.positivePrefix?.contains('%') == true }
         // Lo que cabe dentro del aro: "100" con su "%" chico.
         val size = fitFont("100", maxWidth * 0.66f, maxHeight, 0.34f, min = 10f, max = 40f, extraChars = 0.6f)
-        Row(verticalAlignment = Alignment.Bottom) {
-            Label(text, Typography.title.copy(fontSize = size.sp), if (score == null) c.textMuted else c.text, maxLines = 1)
+        val percent = @Composable {
             if (score != null) Label("%", Typography.title.copy(fontSize = (size * 0.5f).sp), c.textMuted, maxLines = 1, modifier = Modifier.padding(bottom = (size * 0.1f).dp))
+        }
+        Row(verticalAlignment = Alignment.Bottom) {
+            if (percentFirst) percent()
+            Label(text, Typography.title.copy(fontSize = size.sp), if (score == null) c.textMuted else c.text, maxLines = 1)
+            if (!percentFirst) percent()
         }
     }
 }
 
 /**
- * Batería (voltaje), motor (refrigerante) y códigos, cada uno con su nombre arriba; "—" sin dato.
+ * Batería (voltaje), enfriamiento (refrigerante) y códigos, cada uno con su nombre arriba; "—" sin dato.
  * Aparte del widget: solo esto se vuelve a dibujar con cada lectura.
  */
 @Composable
@@ -409,16 +416,17 @@ private fun HealthStats(d: Dependencies, report: EngineReport?, connected: Boole
     val voltage = (if (connected) d.bus.watch(Signal.VOLTAGE) else null) ?: report?.voltage
     val coolant = if (connected) d.bus.watch(Signal.COOLANT) else null
     val items = listOf(
-        Triple(stringResource(R.string.gauge_voltage), voltage?.let { sensorText(Signal.VOLTAGE, it, units, locale) } ?: "—", LocalColors.current.text),
-        Triple(stringResource(R.string.zone_engine), coolant?.let { sensorText(Signal.COOLANT, it, units, locale) } ?: "—", LocalColors.current.text),
-        Triple(stringResource(R.string.health_codes_title), codes?.toString() ?: "—", codesColor),
+        // Los mismos nombres que en la pantalla Salud (Batería, Enfriamiento).
+        Triple(stringResource(R.string.zone_battery), voltage?.let { sensorText(Signal.VOLTAGE, it, units, locale) } ?: "—", LocalColors.current.text),
+        Triple(stringResource(R.string.zone_cooling), coolant?.let { sensorText(Signal.COOLANT, it, units, locale) } ?: "—", LocalColors.current.text),
+        Triple(stringResource(R.string.health_codes_title), codes?.let { String.format(locale, "%d", it) } ?: "—", codesColor),
     )
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val column = maxWidth / 3
         Row(Modifier.fillMaxWidth()) {
             for ((name, value, color) in items) Column(Modifier.weight(1f)) {
                 // Angosto: el nombre en letra chica normal (en mayúsculas se enciman).
-                Label(if (column < 80.dp) name else name.uppercase(), if (column < 80.dp) Typography.small else Typography.label, LocalColors.current.textMuted, maxLines = 1)
+                Label(if (column < 80.dp) name else name.uppercase(locale), if (column < 80.dp) Typography.small else Typography.label, LocalColors.current.textMuted, maxLines = 1)
                 val size = fitFont(value, column - 6.dp, 40.dp, 0.6f, min = 12f, max = 22f, extraChars = 0f)
                 Label(value, Typography.subtitle.copy(fontSize = size.sp), color, maxLines = 1)
             }

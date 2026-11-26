@@ -4,14 +4,859 @@ Todos los cambios que nota quien usa LiteDash. Formato
 [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), versiones
 [SemVer](https://semver.org/lang/es/).
 
-## [Sin publicar]
+## [1.5.23] - 2026-11-25
 
-## [1.4.148] - 2026-11-15
+Vidrio líquido de verdad, Diseños con fondo de día y de noche, y un inicio más fácil de deslizar.
+
+### Nuevo
+- **Vidrio líquido:** las tarjetas de vidrio dejan ver tu fondo nítido y lo doblan en la orilla, como un cristal
+  grueso, con un destello fino en las esquinas. Funciona desde Android 6; en pantallas de poca memoria va sin doblar.
+- **Diseños con fondo de día y de noche:** cada Diseño trae dos fondos hermanos y, con «Día y noche», LiteDash pone
+  solo el que toca. Los fondos son nuevos, con color y formas que lucen el cristal.
+- **Flecha / Auto también en el widget Mapa:** durante la guía el cambio sale en el widget (si mide al menos 240 dp) y
+  lo que elijas se conserva al abrirlo en grande y al regresar.
+
+### Cambiado
+- **Elegir un Diseño pide confirmación** («¿Aplicar el diseño…?») en vez del botón Aplicar; Deshacer sigue ahí.
+- **Deslizar cambia de página desde cualquier widget** (antes solo desde un hueco). El mapa y tu auto conservan su gesto.
+- **Pista** lleva tu auto en la carretera; **Ruta**, el auto más grande; **Nube**, un fondo mucho más claro.
+- Las miniaturas de los Diseños muestran el auto de fábrica.
+
+### Quitado
+- **Widget Pila:** quien tenía una conserva en su lugar el widget que estaba a la vista.
+- **Acomodos:** quedan los Diseños. Tu inicio no cambia al actualizar.
+- **«Filo de luz»** en Tarjetas: el cristal ya trae su propio brillo.
+- **Deslizar para cambiar de canción** en los widgets Música y Radio (chocaba con cambiar de página); en grande sigue.
+- **Tu auto sobre el mapa de fondo:** ahí siempre va la flecha.
+
+## [1.5.22] - 2026-11-25
+
+Dos cosas que funcionaban y se habían perdido: aprender las luces por el brillo y el sonido del Bluetooth de fábrica.
+
+### Arreglado
+- **Luces del auto por el brillo de la pantalla:** en muchas pantallas lo único que cambia al prender los faros es el
+  brillo. «Aprender luces» lo vuelve a ofrecer (lo eliges tú, como «Brillo») y lo reconoce aunque el brillo no quede
+  en el mismo número exacto. Desde la 1.4.162 decía «Ningún ajuste cambió» en esas pantallas.
+- **Bluetooth de fábrica sin sonido** (pantallas sin GPS ni OBD en uso, como algunas Essgoo y Autochips): al tocar ▶
+  en la pieza Música, LiteDash vuelve a pedirle a la pantalla que pase su sonido a Bluetooth. Antes solo lo hacía al
+  tocar el aviso «Controla la música desde tu celular», que desaparecía en cuanto el celular empezaba a sonar.
+
+## [1.5.21] - 2026-11-25
+
+Vincula tu celular sin cámara: con un código de 6 dígitos.
+
+### Nuevo
+- **Vincular con código:** en Ajustes → Celular, debajo del código QR sale un código de 6 dígitos. Si tu celular no
+  puede leer el QR (cámara rota o sin permiso), en LiteDash Connect toca «Escribir un código» y ponlo. Lo demás es
+  igual: confirmas en el celular y listo. Necesita LiteDash Connect 0.7.0 o posterior.
+- El código cambia cada 5 minutos, al usarse y si alguien falla tres veces: no se puede adivinar probando.
+
+## [1.5.20] - 2026-11-25
+
+Diseños: cambia todo tu inicio de un toque. Y la ruta con internet ya funciona en pantallas con Android 9 o anterior.
+
+### Nuevo
+- **Diseños:** 8 estilos completos (Grafito, Nube, Pista, Ruta, Columna, Neón, Arena y Bosque). Un toque pone acomodo,
+  fondo, tema, tarjetas, colores, mapa y velocímetro, con **«Deshacer»**; después todo se edita como siempre. Están en
+  Ajustes → Inicio y apariencia → Inicio y al acomodar. Todos gratis.
+- **Widget Pila:** de 2 a 5 widgets en el mismo lugar; desliza o toca los puntitos para cambiar.
+- **Bienvenida nueva** en tres pasos: tu Diseño, tu nombre y tu auto.
+- **Filo de luz** a tu gusto en las tarjetas de vidrio: sin filo, delgado o marcado (Tarjetas).
+
+### Cambiado
+- **Vidrio nuevo:** las tarjetas de vidrio dejan ver mejor tu fondo, con reflejo y sombra, y de fábrica ya no llevan
+  el filo blanco (si te gustaba, elige «Delgado» o «Marcado»).
+- Las plantillas ahora se llaman **«Acomodos»**. Las instalaciones nuevas arrancan con el Diseño Grafito; si actualizas,
+  tu inicio no cambia.
+
+### Arreglado
+- **Ruta con internet en Android 9 y anteriores:** decía «No se pudo trazar la ruta en línea» siempre, porque esas
+  pantallas no pueden conectarse al servidor de rutas. Ahora el pedido pasa por litedash.dev, que solo lo reenvía.
+- **Luces del auto:** aprenderlas ya no se pierde si tu pantalla cambia de modo al prender los faros, el estado se
+  vuelve a leer al regresar a LiteDash y, si ningún ajuste cambió, te dice qué revisar y deja mandar un reporte.
+- Un Diseño conserva tu tema «Día y noche» si ya lo usabas.
+- **Bluetooth de fábrica:** tocar ▶ ya no abre la app de Bluetooth de la pantalla por su cuenta; solo el aviso
+  «Controla la música desde tu celular».
+
+## [1.5.19] - 2026-11-25
+
+Mapas de México a la mitad de peso, listos para lo que viene (carriles, salidas, radares).
+
+### Nuevo
+- **Mapas más ligeros:** las calles ya se guardan una sola vez. México completo baja de 825 a ~400 MB (Estado de
+  México de 56 a 31 MB) y se ve igual. Por ahora México; los demás países irán cambiando sin que hagas nada.
+- **«Actualizar»** junto a cada estado que ya tenías bajado, con su tamaño nuevo: no es obligatorio y tu mapa de hoy
+  sigue funcionando.
+- El mapa, las calles y la búsqueda de un estado se bajan en una sola descarga, que se puede pausar y seguir.
+- Calles privadas y de fraccionamientos también se dibujan.
+
+### Arreglado
+- **Elegir imagen (Android 11–12):** en pantallas donde la memoria no se deja leer, «Recientes» ya muestra tus fotos
+  en vez de carpetas vacías.
+- Una ruta a un fraccionamiento cerrado ya no dice «sin camino»: te lleva a la calle más cercana.
+- Si se va la luz a media descarga de un mapa, no se pierde lo bajado; «Cancelar» responde siempre.
+
+## [1.5.18] - 2026-11-24
+
+Navegar ya no te saca de tu inicio: la guía vive en tu mapa, con tu música y tus widgets donde los dejaste.
+
+### Nuevo
+- **La navegación dentro del widget Mapa:** al tocar «Ir» no cambia la pantalla; tu widget empieza a guiarte con la
+  vuelta, la llegada y «Terminar». Según su tamaño muestra más o menos; tócalo para verlo en grande.
+- **Dos vistas, un botón:** en el mapa en grande (y en el widget grande) cambia entre **vista flecha** y **vista del
+  auto**.
+- **El mapa de fondo también navega**, con las tarjetas de la guía flotando en el hueco de tus widgets.
+- **Aviso de la próxima vuelta** arriba cuando estás en otra página, en Ajustes o con la música en grande; tocarlo te
+  regresa al mapa. El botón Navegar de la barra lleva un punto mientras hay guía.
+- **Más cerca:** la vista flecha se acerca más a la calle cuando vas despacio.
+
+### Cambiado
+- Se quitó la pantalla de navegación aparte (y su reproductor): la música es tu widget de siempre.
+- Con una guía en curso, «Navegar» (barra y volante) te lleva a ella; la lupa del mapa en grande cambia de destino.
+
+### Arreglado
+- «Ver ruta» ya no se queda abierta al llegar, y al terminar el mapa vuelve a centrarse en ti.
+
+## [1.5.17] - 2026-11-24
+
+Mapas nuevos: más limpios, con ruta aunque no hayas bajado tu estado y una navegación que se ve como debe.
+
+### Nuevo
+- **Ruta con internet sin bajar el mapa:** si no tienes el mapa de tu estado (o vas a otro), la ruta se traza en línea
+  y la navegación te guía igual. Del lado de tu auto sale «baja el mapa» con su botón; al terminar, aparece tu auto con
+  la franja azul sin dejar de navegar. Sin internet y sin mapa, te pide bajarlo como antes.
+- **Colores nuevos del mapa** (azul pizarra de noche, claro de día) y tres opciones en Ajustes → Apps → Navegación:
+  **De fábrica**, **Como mi interfaz** y **Color propio**.
+- **La ruta «fluye»:** flechitas suaves avanzan sobre la línea hacia donde vas (se apaga en «Animar la ruta»; en
+  pantallas lentas quedan quietas).
+- **Navegación más cerca:** el mapa de la derecha va inclinado y a nivel de calle, se aleja con la velocidad y se
+  aplana antes de cada vuelta. Muévelo con el dedo y «Seguirme» lo regresa.
+- Glorietas con «toma la salida N».
+
+### Cambiado
+- Widget, mapa de fondo y mapa en grande siempre planos; sin edificios, más ligeros.
+- El mapa en grande abre directo al buscador: sin brújula ni «Marcar aquí» (dejar presionado sigue marcando).
+- Flecha de tu posición redondeada.
+
+### Arreglado
+- La lista del buscador se cierra al tocar fuera o con atrás.
+- Al empezar a navegar detenido, el mapa ya mira hacia donde sale la ruta.
+
+## [1.5.16] - 2026-11-24
+
+Ajustes más ordenados y fáciles de encontrar, y mapas de un país completo de un solo toque.
+
+### Nuevo
+- **Mapa de un país completo:** en Ajustes → Apps → Navegación → Sin conexión, busca tu país (por ejemplo «México»): sale
+  primero con **«Descargar completo»** y su tamaño, y abajo todos sus estados. Se bajan uno tras otro, con avance y Cancelar.
+- **«Marcar aquí»** en el mapa en grande: toca el botón del pin, mueve el mapa hasta la mira y marca el punto sin dejar
+  presionado.
+- **Agregar widget** directo desde Ajustes → Inicio y apariencia → Inicio.
+- **Reiniciar el viaje** desde las opciones de los widgets Viaje y Carretera (con confirmación).
+- Botón «Usar LiteDash Connect» cuando la música por Bluetooth de tu pantalla solo se controla desde el celular.
+
+### Cambiado
+- **Ajustes reorganizados:**
+  - Inicio y apariencia: Inicio · **Idioma y unidades** (km/°C arriba, a la vista) · Barra · Interfaz · **Tema y brillo**.
+  - El fondo (imagen o mapa) se elige en Inicio; «Ocultar la barra de Android» pasó a Barra.
+  - **Clima** ahora es un módulo (Ajustes → Módulos), como Taller y Llantas.
+  - **Acerca de y ayuda** (antes Sistema): «Reportar un problema» tiene su propia pestaña.
+  - Módulos → Permisos muestra todos los permisos y solo los pide al tocarlos.
+  - Taller con pestañas siempre y «Adaptador y viajes»; Llantas: Sensores · Presión y avisos · Calibrar · En el inicio.
+- **Idiomas y países:** se ven unos cuantos y «Ver todos».
+- **Un solo aspecto del mapa** para todos los widgets y el mapa en grande (Ajustes → Apps → Navegación); se quitó el mapa
+  «Completo», que no servía para la ruta ni la búsqueda.
+- **Guía:** atrás ya no la termina (solo el botón rojo), se cierra sola 30 s después de llegar y sin velocidad dice «—».
+- **Teléfono:** la app que elijas la usan el widget, la barra y el volante.
+- Tocar el auto lo muestra en grande de fábrica. Nombres iguales en barra y volante, y textos sin jerga.
+- Botón de Android Auto / CarPlay con un ícono nuevo.
+- Tema claro: textos grises más legibles. Escalas redondas en mpg y gal/h.
+
+### Arreglado
+- Lo que habías elegido en el widget Teléfono, Android Auto / CarPlay o en el aspecto de un widget Mapa se conserva.
+- La ruta ya no se queda esperando la red al calcularse; las vueltas obligatorias se respetan mejor.
+- Se borran solas cachés viejas del mapa que ya nadie usaba (hasta ~25 MB).
+
+## [1.5.15] - 2026-11-23
+
+Auditoría completa de la semana: muchos arreglos chicos en toda la app. Lo que más se nota:
+
+### Nuevo
+- **Botón de Android Auto / CarPlay en la barra** (y acción para el volante). Abre tu app de proyección (ZLink, AutoKit,
+  CarLetter, Open Headunit…) o la que elijas en **Ajustes → Apps → Android Auto / CarPlay**. Como cualquier botón, se
+  puede quitar o mover. El botón de Bluetooth vuelve a abrir solo Bluetooth.
+- **«Oscurecer el fondo»** junto a tu fondo de pantalla: deja tu imagen más limpia o más cerrada (#34).
+- **Botones + y −** en el mapa en grande, para pantallas donde el gesto de dos dedos no responde.
+- **Aleatorio** en la música de Archivos, a un toque en la música en grande.
+- **Las descargas de mapas se reanudan:** si se corta la red siguen donde iban (solas al volver internet, o al tocar
+  «Descargar»), y antes de bajar se avisa si no cabe.
+
+### Cambiado
+- **Ajustes → Apps → Navegación** ahora es como Música y Radio: arriba eliges **«Navegar con»** (Mapa de LiteDash o App
+  de mapas) y abajo sale lo de tu elección. «Tu app de mapas» acepta cualquier app con «Otra app…».
+- **Mapas sin conexión más fáciles de encontrar:** la lista dice si se está bajando o si falló (con «Reintentar»), los
+  mapas por estado se ven con cualquier estilo de mapa, y el buscador encuentra el estado o el país en cualquier idioma.
+- **Idiomas:** los 21 idiomas descargables están a la vista (antes solo salían al escribir). Con «Como el sistema» y
+  un sistema que no está en español, LiteDash sale en inglés o en el idioma que ya hayas bajado.
+- **Tarjetas de vidrio sobre el mapa de fondo:** ahora van como cristal ahumado en vez de un panel plano (#32), y el
+  widget Clima ya se ve como las demás (#33).
+- La búsqueda de lugares ordena mejor: primero lo que se llama igual que lo que escribes y lo que queda cerca.
+- Con la barra oculta, cualquier toque en un lugar libre la asoma. En el cajón de apps, «Elegir» deja ocultar una app
+  o ver su información sin dejar presionado. Aplicar una plantilla sobre una página con widgets pide confirmación.
+
+### Arreglado
+- **«Abrir LiteDash al encender»** fallaba en algunos encendidos; además ahora reconoce el encendido de más pantallas
+  (TS10 / QF, Autochips, Jancar).
+- **Música:** el botón de la pantalla hace siempre lo que muestra (ya no hay que tocar play dos veces); el volante ya
+  distingue si suena la radio o la música; el Bluetooth de Android 6–8 muestra la canción; en pantallas cuyo Bluetooth
+  no se puede controlar, el widget lo dice en vez de enseñar un play que no hace nada.
+- **Guía:** si te sales de la ruta lo dice, al recalcular la ruta ya no arranca hacia atrás, y al terminar la guía la
+  ruta se vuelve a trazar desde donde estás.
+- **Clima:** en Android 6–10 podía quedarse en «Buscando el clima…»; sin internet muestra la temperatura pronosticada.
+- **OBD:** más estable con adaptadores clon; ya no insiste con el permiso del cable USB; «Desconectar» se respeta.
+- **Llantas:** en pantallas sin pila de reloj se conserva el historial, así la fuga lenta sí puede avisar.
+- **Pantallas sin pila de reloj:** cuando la fecha está mal, LiteDash lo dice en vez de «revisa tu internet».
+- Tu auto → Modelos: el catálogo ya no dice «Buscando…» y «No se pudo bajar» a la vez, y tiene «Reintentar».
+- Con tema claro e imagen de fondo ya se leen el menú de Ajustes y lo que va sin tarjeta.
+- Más de cien arreglos menores de la auditoría (memoria, trabajo en segundo plano, textos y permisos).
+
+## [1.5.14] - 2026-11-18
+
+### Cambiado
+- **Acomodar la barra sin dejar presionado:** en Ajustes → Inicio y apariencia → Barra, toca un botón de la barra (o
+  una de sus dos rayas, o tus favoritas) y muévelo con las flechas, o quítalo con «Quitar». En muchas pantallas de auto
+  dejar presionado y arrastrar no respondía bien. En el inicio se sigue pudiendo arrastrar como antes.
+
+## [1.5.13] - 2026-11-18
+
+### Cambiado
+- **Vidrio nuevo, tipo cristal:** las tarjetas de vidrio ya casi no llevan relleno: se ve tu fondo a través, menos
+  desenfocado y con los colores más vivos, con un filo de luz que nace en la esquina. Si tu imagen es muy clara (o muy
+  oscura con el tema claro), el fondo detrás de cada tarjeta se atenúa solo lo necesario para que el texto se lea.
+- **«Cuánto se ven» ahora va de cristal a lisa:** en Ajustes → Inicio y apariencia → Interfaz, todo a la izquierda es
+  puro cristal y hacia la derecha la tarjeta se va llenando con su color. De fábrica viene como cristal.
+- En las páginas con el mapa de fondo las tarjetas conservan su relleno de antes (el mapa se mueve y no se desenfoca).
+
+## [1.5.12] - 2026-11-18
+
+### Cambiado
+- **La muestra de las tarjetas es tu inicio de verdad:** en Ajustes → Inicio y apariencia → Interfaz, la muestra usa el
+  pedazo de tu fondo a la escala del inicio y la tarjeta lleva el mismo vidrio que tus widgets (antes mostraba el fondo
+  entero en chico y sin desenfoque, y no se parecía a lo que veías después).
+- **Widget Música angosto y alto:** los botones van al centro cuando no hay lugar para la carátula a un lado; y si el
+  widget es un poco más alto, la carátula sale chica junto al título.
+
+## [1.5.11] - 2026-11-18
+
+### Cambiado
+- **La ruta y la guía en 3D, más claro por qué piden el mapa:** el aviso ahora dice que usan el mapa descargado de tu
+  estado o país aunque tengas internet, y lleva un botón directo a la descarga. Si todavía no hay mapa de tu zona, el
+  botón «Mapas disponibles» te lleva a la lista, donde también puedes pedir el tuyo.
+
+### Arreglado
+- **El control de volumen con tarjetas de vidrio** ya no sale translúcido encima del inicio (no se leía): siempre es
+  una tarjeta lisa.
+- **Carátula cortada en el widget Música:** en un widget angosto y no muy alto la carátula salía como una franja
+  delgada arriba; si no cabe bien, ya no se pone y el título y los botones van centrados.
+
+## [1.5.10] - 2026-11-18
+
+### Arreglado
+- **El botón de play/pausa del volante ya pausa a la primera:** si la música (Spotify u otra app, o tus archivos) ya
+  estaba sonando y el widget Música no estaba a la vista o aún no sabía que sonaba, el botón del volante mandaba «play»
+  otra vez en lugar de «pausa», y no había forma de pausarla sin tocar la pantalla. Ahora LiteDash pregunta en ese
+  momento si la app está sonando antes de decidir.
+
+## [1.5.9] - 2026-11-18
 
 ### Agregado
-- **Prius c 2014 de fábrica:** la app trae un auto propio (Toyota Prius c 2014, modelo de Bobby, CC-BY-4.0). Se instala
-  una sola vez al abrir, sin internet, y es el de la pantalla si todavía no elegiste otro; si lo eliminas no vuelve.
-  El catálogo sigue igual. El APK pesa unos 1.8 MB más.
+- **Botón de Inicio en la barra:** te regresa al tablero y cierra lo que tengas en grande (mapa, música) o abierto. Sale
+  solo al principio de la barra; se puede mover o quitar como los demás.
+- **La barra se acomoda también desde sus ajustes:** en Ajustes → Inicio y apariencia → Barra ahora se ve la barra
+  misma; ahí arrastras los botones para ordenarlos, los quitas con la x y mueves las dos rayas que la parten.
+
+### Cambiado
+- **La ruta se ajusta a la pantalla:** al tocar «Ruta», el mapa encuadra el camino completo usando todo el espacio
+  libre, a lo ancho o a lo alto según la ruta. Antes se alejaba de más: la ruta se veía chica y a veces el mapa de tan
+  lejos no cargaba.
+- Tus apps favoritas, cuando aún no eliges ninguna, se marcan con una estrella al acomodar la barra (tenían el mismo
+  ícono que «Todas las apps»).
+
+## [1.5.8] - 2026-11-18
+
+### Cambiado
+- **«Usar app de mapas externa», ahora sí para todo:** la opción de Ajustes → Apps → Navegación decide un solo
+  camino. Apagada (de fábrica), todo usa el mapa de LiteDash: el toque al widget Mapa, Casa, Trabajo, la barra y el
+  volante; ya no aparece el botón de tu app de mapas en el widget ni «Abrir en…» en la tarjeta del lugar. Prendida, el
+  widget sigue mostrando el mapa con tu flecha, pero un toque abre directo tu app de mapas (Waze, Google Maps…), igual
+  que Casa, Trabajo, la barra y el volante.
+- **Casa y Trabajo en el mapa de LiteDash:** con la app externa apagada, tocarlos abre el lugar en el mapa de LiteDash,
+  listo para trazar la ruta.
+- **El widget Mapa ya no tiene brújula:** esa es de la navegación (sigue en el mapa en grande y en la guía).
+
+## [1.5.7] - 2026-11-18
+
+### Cambiado
+- **Los países con mapa, a la vista:** en Ajustes → Apps → Navegación → Sin conexión → Por estado ahora se ven siempre
+  los países disponibles (México, Estados Unidos, Puerto Rico, Canadá y Colombia); toca uno y salen sus estados. Antes
+  estaban escondidos tras «Otros estados» y mucha gente pedía un país que ya estaba.
+- **Sin conexión abre en «Por estado»** aunque la pantalla aún no sepa dónde estás (abría en «Por zona» y los estados ni
+  se veían), y enciende el GPS mientras está abierta para poner tu estado arriba.
+- El reporte técnico incluye qué mapas tienes bajados.
+
+## [1.5.6] - 2026-11-18
+
+### Cambiado
+- **El aviso de la ruta ya no confunde:** decía «Para la ruta sin internet, baja el mapa de tu estado» y muchos entendían
+  que no tenían internet. LiteDash traza la ruta con el mapa descargado de tu estado; ahora el aviso dice cuál hace falta
+  («hace falta el mapa de Jalisco») y aclara que las zonas solo sirven para ver el mapa.
+- **Botón «Bajar mapa» en ese aviso:** te lleva directo a Ajustes → Apps → Navegación → Sin conexión.
+- Si todavía no hay mapa de donde estás, el aviso lo dice en vez de mandarte a bajar algo que no existe.
+
+## [1.5.5] - 2026-11-18
+
+### Cambiado
+- **Vueltas naturales en la guía:** en las esquinas la ruta azul ya no hace un pico cuadrado; traza la curva que da un
+  auto al girar, y tu auto la sigue.
+
+### Arreglado
+- **Tidal y otras apps de música que no salían en la lista** (Ajustes → Apps → Música → App): ahora también aparecen
+  las que se declaran app de música aunque no ofrezcan su biblioteca, y Tidal, Qobuz, SoundCloud y Pandora siempre que
+  estén instaladas. (Cualquier otra se sigue pudiendo elegir con «Otra app».)
+
+## [1.5.4] - 2026-11-18
+
+### Arreglado
+- **La línea azul de la ruta no aparecía en Android 8.1 y anteriores:** en muchas pantallas la ruta no se dibujaba en la
+  guía («Ir») ni en el mapa de junto. Ahora se dibuja solo lo que se ve y funciona en cualquier pantalla.
+- **La guía ya no recalcula sin parar** cuando sales de un estacionamiento o el GPS anda lejos de la calle (la tarjeta
+  parpadeaba entre «Recalculando» y «Esperando ubicación»).
+- La ruta se vuelve a calcular sola si tu ubicación real resultó estar lejos de la última conocida, y también cuando
+  llega la lista de estados si abriste sin internet.
+- En la guía, la hora, la velocidad y la próxima vuelta ya no se enciman con la barra de estado de Android.
+- Ver toda la ruta ajusta bien el zoom en pantallas de densidad baja o muy alta.
+
+### Cambiado
+- **Guía más limpia, estilo Tesla:** la ruta es una franja azul lisa (sin orilla blanca ni halo) y las calles de doble
+  sentido llevan una sola raya amarilla delgada en vez de dos.
+- **Mapa más ligero:** detenido ya no se redibuja 30 veces por segundo (el GPS baila aunque no te muevas); los pedazos
+  del mapa se dibujan sin volver a leer el disco, en hilos de menor prioridad que la interfaz, y con un tope de memoria.
+- Cada ruta y cada recálculo reusan el ruteador ya abierto (antes se volvía a abrir el archivo de calles cada vez).
+
+## [1.5.3] - 2026-11-18
+
+### Arreglado
+- **Android 8 y anteriores:** al elegir un lugar en el buscador del mapa, el teclado se volvía a abrir y tapaba la
+  tarjeta del lugar (Ruta, Favorito, Casa/Trabajo). Ahora el teclado se esconde y la tarjeta aparece.
+
+## [1.5.2] - 2026-11-18
+
+### Nuevo
+- **Mapas sin conexión de tres países más:** **Estados Unidos** (los 50 estados, Washington D. C. y Puerto Rico),
+  **Canadá** (las 10 provincias y los 3 territorios) y **Colombia** (los 33 departamentos). Cada estado completo en una
+  descarga; los grandes pesan más (California ~700 MB): bájalos con buen internet.
+
+### Cambiado
+- **La ruta usa mucha menos memoria:** solo lo que recorre, no todo el estado (en California, una ruta por la ciudad
+  pasa de ~46 MB a ~1 MB), así que los estados grandes funcionan también en pantallas de 1 GB.
+- Si un viaje no cabe en la memoria de tu pantalla, LiteDash te lo dice («Este viaje es muy largo…») en vez de
+  cerrarse.
+
+## [1.5.1] - 2026-11-17
+
+### Cambiado
+- **Un toque al mapa abre la navegación de LiteDash.** El widget Mapa siempre abre el mapa de LiteDash en grande
+  (buscador, ruta y guía); tu app de mapas (Waze, Google Maps…) está en su botón de la esquina.
+- El botón de navegar de la barra y el del volante también abren el mapa de LiteDash. Si prefieres tu app de mapas,
+  prende «Abrir tu app de mapas desde la barra y el volante» en Ajustes → Apps → Navegación (si ya la habías cambiado,
+  se queda como la dejaste).
+
+## [1.5.0] - 2026-11-17
+
+**LiteDash 1.5: Navegación sin conexión.** Todo lo de la 1.4.168 a la 1.4.184 en una versión: sin claves de API ni
+cuentas.
+
+### Nuevo
+- **Descarga tu estado o una zona** y busca, traza tu ruta y síguela sin internet.
+- **Guía estilo Tesla:** tu auto en 3D sobre la ruta azul, calles con rayas, edificios en 3D, la próxima vuelta y tu
+  música junto al mapa.
+- **Brújula** en el widget Mapa, el mapa en grande y la guía.
+- **¿No está tu país? Pídelo** desde Ajustes → Apps → Navegación → Sin conexión.
+- Mapa de fondo y páginas en el inicio, apariencia de vidrio en toda la app y la barra de apps por partes.
+
+## [1.4.184] - 2026-11-17
+
+### Nuevo
+- **Pide el mapa de tu país.** En Ajustes → Apps → Navegación → Sin conexión, «¿No está tu país? Pídelo» abre un
+  reporte ya listo: escribes tu país y región y lo agregamos para que funcione sin internet.
+
+### Arreglado
+- La brújula del widget Mapa no hacía nada al primer toque: ahora apunta como está girado el mapa y cambia al instante.
+- En celulares acostados el teclado del buscador del mapa se cerraba al abrirlo.
+
+## [1.4.183] - 2026-11-17
+
+### Cambiado
+- En la guía, la música va abajo solo del lado del mapa (como Tesla); tu auto llega hasta abajo de la pantalla.
+
+## [1.4.182] - 2026-11-17
+
+### Nuevo
+- **La guía, como Tesla.** La ruta va en azul con brillo y pasa por debajo de todo tu auto; las calles se ven
+  rellenas, con banqueta, orillas y raya amarilla al centro en las de doble sentido (blanca punteada en las anchas de
+  un solo sentido), y los edificios se levantan en 3D con su altura real (donde el mapa la trae).
+- **La música en la guía.** Abajo, a lo ancho, como en Tesla: ves qué suena y cambias de canción sin salir.
+- **Brújula en el mapa.** Un botón redondo en el widget Mapa, en el mapa en grande y en la guía: apunta al norte y un
+  toque cambia entre «siempre al norte» y «hacia donde vas». En Ajustes, la orientación ahora tiene tres opciones:
+  Automático (como siempre), Hacia donde vas y Siempre al norte.
+- **La barra oculta se asoma con un toque** (#27). Con «Ocultar la barra», toca un espacio vacío del inicio y aparece
+  unos segundos encima, sin mover tus widgets.
+
+### Cambiado
+- En la guía, «Ver ruta» y «Terminar» ahora son botones redondos a la derecha del mapa, junto a la brújula.
+- Los avisos (llantas, motor, «LiteDash no es tu inicio»…) flotan arriba encima de los widgets en vez de empujarlos
+  hacia abajo (#27); con el mapa o la música en grande solo quedan los del auto.
+- El buscador de apps va arriba, entre el título y la ✕, y la lista gana casi una fila en pantallas bajas (#28).
+- La ruta se dibuja en azul en todos los mapas.
+
+### Arreglado
+- En Android 6 el teclado del buscador ya no se queda abierto encima de la guía.
+
+## [1.4.181] - 2026-11-17
+
+### Cambiado
+- Al acomodar la barra de apps, los demás íconos se recorren mientras arrastras uno (como los widgets del inicio); ya
+  no hay que soltarlo para ver cómo queda.
+
+## [1.4.180] - 2026-11-17
+
+### Nuevo
+- **La barra de apps, a tu manera.** Al acomodarla (déjala presionada) aparecen dos rayas: lo que dejes antes de la
+  primera va a la izquierda, entre las dos al centro y después de la segunda a la derecha. Arrastra los íconos para
+  ordenarlos o cambiarlos de parte, y las rayas también. En la barra lateral es arriba, centro y abajo.
+
+### Cambiado
+- **Colores más fáciles de elegir.** En Ajustes → Inicio y apariencia → Interfaz todo lo del color vive en
+  «Tarjetas»: primero las combinaciones listas y, al tocar la paleta (el último círculo), se abren el color de las
+  tarjetas y el de la interfaz por separado.
+
+## [1.4.179] - 2026-11-17
+
+### Cambiado
+- **Fondo de fábrica más sobrio.** Sin imagen de fondo, el resplandor detrás del vidrio ya no lleva el ámbar: ahora
+  son luces neutras (plata y acero), en oscuro y en claro. Si eliges un color de interfaz, el resplandor lo toma.
+
+## [1.4.178] - 2026-11-17
+
+### Nuevo
+- **Toda la app con la piel que elijas.** El estilo de las tarjetas ya no es solo del inicio: la barra de abajo, la
+  música y el mapa en grande, Ajustes, el Taller y todos los paneles llevan el mismo vidrio y el mismo color.
+- **Vidrio de fábrica.** Las tarjetas dejan ver tu fondo de pantalla desenfocado; sin imagen, un resplandor suave con
+  tu color. Si prefieres lo de antes: Ajustes → Inicio y apariencia → Interfaz → Tarjetas → «Lisas».
+- **Colores vivos y combinaciones listas.** Azul, verde, vino, naranja, violeta, arena… o el que quieras. Tú eliges
+  el color y LiteDash lo acomoda al tema: profundo de noche y claro de día, para que todo se siga leyendo.
+
+### Cambiado
+- Las tarjetas son lisas o de vidrio; las «translúcidas» pasan a vidrio.
+
+### Arreglado
+- Con vidrio, el velocímetro y los medidores ya no se veían apagados: su aro y sus marcas ahora se leen sobre
+  cualquier fondo.
+
+## [1.4.177] - 2026-11-17
+
+### Arreglado
+- **El escáner OBD por Bluetooth se queda conectado.** Antes se desconectaba al rato de no ver sus widgets (al abrir
+  Ajustes, la música o el mapa en grande, o cambiar de página) y volvía a conectar desde cero; varios adaptadores
+  ELM327 fallaban al reconectar. Ahora conecta una vez y así se queda hasta que tú lo desconectes o apagues el módulo.
+- Si el Bluetooth de la pantalla está apagado o tarda en prender al encender el auto, el Taller lo dice claro y
+  conecta solo en cuanto prende. «Encender Bluetooth» abre los ajustes de Bluetooth de Android si la pantalla no lo
+  prende sola, y «Apagar Bluetooth» ahora pide confirmar (estaba junto a los adaptadores).
+- Cada intento de conexión es más ligero (una ronda en vez de dos) y, con el adaptador dormido, reintenta a lo más
+  cada minuto en vez de cada cinco.
+- Deslizar sobre el widget de Música o Radio cambia de canción o estación aunque la pantalla no muestre los datos de
+  lo que suena (igual que sus botones).
+- El mapa ya no se va a medio océano cuando el GPS manda «0, 0» por falta de señal: conserva tu último punto.
+
+## [1.4.176] - 2026-11-17
+
+### Nuevo
+- **La guía vuelta por vuelta, sin internet:** con la ruta lista toca «Ir» y se abre la pantalla de conducción. A la
+  izquierda tu auto de espaldas sobre las calles, con la ruta como una franja del ancho del auto (como Tesla); a la
+  derecha el mapa con la próxima vuelta («50 m · Gira a la izquierda hacia Av. Insurgentes», y «Luego…»), la hora de
+  llegada, lo que falta y la barra de avance. De pie, el auto arriba y el mapa abajo.
+- Si te sales de la ruta, recalcula al instante en tu pantalla; al llegar te dice «Llegaste».
+- «Ver ruta» enseña toda la ruta y «Terminar» te regresa a donde estabas, sin tocar tu inicio.
+
+## [1.4.175] - 2026-11-17
+
+### Nuevo
+- **Tu ruta, sin internet:** en la tarjeta de un lugar toca «Ruta» y LiteDash la calcula en tu pantalla con las
+  calles de tu estado (respeta sentidos y vueltas prohibidas). Ves la ruta dibujada sobre el mapa, cuánto mide, cuánto
+  tardas (sin contar el tráfico), a qué hora llegas y por qué calle vas. La guía vuelta por vuelta llega en la
+  siguiente etapa; mientras, «Abrir en tu app de mapas».
+- Las calles para la ruta vienen con el mapa de tu estado. Si ya lo tenías bajado, al pedir tu primera ruta te ofrece
+  bajarlas (Colima pesa 1.7 MB y el Estado de México, el más grande, 22 MB).
+- Si el lugar está en otro estado o no tienes bajado el tuyo, te lo dice y te deja abrirlo en tu app de mapas.
+
+### Cambiado
+- Con la tarjeta de un lugar abierta, el mapa pone el lugar en la parte que la tarjeta deja libre.
+
+## [1.4.174] - 2026-11-16
+
+### Nuevo
+- **Busca a dónde ir en el mapa:** en el mapa en grande (o con la lupa del widget Mapa) escribe un lugar, una calle,
+  una colonia o un pueblo y los resultados salen al instante, **sin internet**, del mapa de tu estado (más cerca
+  primero, aunque escribas sin acentos o con un error de dedo). Si no está, «Buscar en internet» lo busca en todo el
+  mundo con una sola consulta. Toca un resultado y el mapa va ahí con un pin y su tarjeta: a cuánto queda, abrirlo en tu
+  app de mapas, guardarlo de favorito o ponerlo de Casa o Trabajo. Tus recientes y favoritos quedan como atajos.
+- **Deja presionado el mapa** para marcar cualquier punto (un rancho, una entrada) y abrirlo en tu app de mapas.
+- **Lugares desde otras apps:** un lugar compartido (WhatsApp, el navegador…) se puede abrir con LiteDash y sale en su
+  mapa.
+- La búsqueda sin internet se baja sola con el mapa de tu estado (y a quien ya lo tenía, la primera vez que busca).
+
+### Cambiado
+- **Sin conexión, más claro:** elige «Por estado» (el mapa de todo tu estado) o «Por zona» (un círculo alrededor de
+  ti); si tu estado aún no está, usa la zona.
+
+## [1.4.173] - 2026-11-16
+
+### Cambiado
+- **«Más idiomas» con buscador:** en vez de la lista completa, escribe tu idioma (en el tuyo o en el de la app:
+  «alemán» o «german» encuentran «Deutsch») y bájalo. Si aún no está, te dice dónde ayudar a traducirlo.
+
+## [1.4.172] - 2026-11-16
+
+### Arreglado
+- **«Más idiomas» ya muestra todos los idiomas** al actualizar la app (antes podía quedarse con la lista vieja hasta un
+  día).
+
+### Cambiado
+- **Buscador en «Otros estados»** del mapa sin conexión: escribe el nombre y aparece (sin escribir, los de tu país).
+
+## [1.4.171] - 2026-11-16
+
+### Nuevo
+- **El mapa de todo tu estado, sin internet:** en Ajustes → Apps → Navegación → Sin conexión aparece «Mapa de tu
+  estado»: LiteDash sabe en cuál estás y lo bajas de una vez (de 4 a 45 MB, según el estado). Los 32 estados de México
+  ya están; también puedes bajar otros, actualizarlos o borrarlos. Tus zonas siguen igual.
+
+## [1.4.170] - 2026-11-16
+
+### Nuevo
+- **Plantilla «Mapa de fondo»** (Plantillas → Mapa): una columna de widgets a la derecha (abajo en pantallas de pie) y
+  el mapa vivo detrás, contigo en el espacio libre.
+
+### Cambiado
+- **Tu auto en el mapa de fondo se ve grande**, de espaldas y con su sombra, a la medida de tu pantalla (antes salía
+  en miniatura).
+- Las plantillas deciden el fondo de la página: «Mapa de fondo» pone el mapa y las demás lo quitan (ya no quedan el
+  mapa de fondo y el widget Mapa a la vez).
+- En una página con mapa de fondo, «Agregar» ya no ofrece el widget Mapa; si eliges el mapa de fondo en una página que
+  ya lo tiene, te avisa y te deja quitarlo.
+
+## [1.4.169] - 2026-11-16
+
+### Nuevo
+- **Páginas en tu inicio:** al acomodar, «+» agrega otra página (hasta 5) con sus propios widgets; deslizas en un
+  espacio libre para cambiar de página y los puntitos de abajo dicen en cuál vas. Con una sola, todo igual que antes.
+- **El mapa como fondo:** cada página elige su fondo, tu imagen o el mapa vivo. El mapa te sigue detrás de tus widgets,
+  contigo en el espacio que dejan libre, y si Waze o Maps te están guiando, su siguiente vuelta sale ahí. Puedes verte
+  como flecha o como tu auto (entonces el mapa gira hacia donde vas).
+- **Tarjetas a tu gusto:** en Inicio y apariencia → Interfaz → Tarjetas eliges su color y si son lisas, translúcidas o
+  de vidrio (con tu imagen de fondo desenfocada detrás), y cuánto se ven.
+
+## [1.4.168] - 2026-11-16
+
+### Cambiado
+- **Mapas sin conexión dentro de las reglas del servidor de mapas:** cada descarga es de 10, 20 o 30 km (OpenFreeMap
+  permite hasta 3 000 teselas o 50 MB por descarga). Lejos del ecuador, si la zona sale más grande, te lo dice antes.
+  Las zonas que ya bajaste se quedan.
+
+## [1.4.167] - 2026-11-16
+
+### Nuevo
+- **23 idiomas:** a español, inglés, francés, portugués y turco se suman alemán, italiano, ruso, ucraniano, polaco,
+  checo, neerlandés, sueco, rumano, húngaro, griego, chino, japonés, coreano, hindi, tailandés, indonesio y vietnamita.
+  Se bajan al elegirlos en Ajustes → Inicio y apariencia → Interfaz → Idioma → Más idiomas.
+- **Revisa tu idioma:** la lista dice cuáles revisó un hablante nativo y cuáles son traducción automática. Si ves un
+  error, repórtalo en litedash.dev/translate.
+- Las novedades de cada versión salen en inglés si no usas la app en español.
+
+### Arreglado
+- Con «Usar app externa» apagado, el mapa en grande ya no muestra el botón para abrir tu app de mapas.
+- Al cambiar de idioma regresas a Ajustes, donde estabas, y no al inicio.
+- Las zonas del mapa sin conexión dicen su tamaño en millas si usas millas.
+- En el explorador de fotos y carpetas, «atrás» sube de carpeta en vez de cerrar todo.
+- En pantallas de pie ya no se cortan la ayuda de «Acomoda tu inicio» ni la descripción de los widgets.
+
+## [1.4.166] - 2026-11-16
+
+### Arreglado
+- **El escáner OBD por Bluetooth vuelve a ser estable** (issue #23): desde la 1.4.163 se desconectaba cada vez que
+  abrías Ajustes y al volver se reconectaba de cero, y muchos adaptadores ELM327 fallan al reconectar tan rápido. Ahora
+  sigue conectado mientras usas la app, espera un momento antes de reabrir la conexión y, al volver a LiteDash, reintenta
+  de inmediato si se había quedado esperando. Si tu auto no da el voltaje, ya no cuenta como falla.
+- **Música por Bluetooth sin sonido con el volumen en 0:** si la pantalla pregunta «¿Se escucha?» y el volumen de la
+  música está en 0, ahora te lo avisa, y contestar «No» ya no guarda que nada funciona en tu pantalla.
+
+## [1.4.165] - 2026-11-16
+
+### Nuevo
+- **El modo estacionado muestra lo que suena** (issue #19): carátula, canción y artista (o la estación de radio) debajo
+  del reloj. El saludo solo sale si guardaste tu nombre en Ajustes → Inicio y apariencia → Interfaz → Tu nombre.
+
+### Arreglado
+- **Pantallas muy bajas** (8.8" de 1280×480 y parecidas, issue #21): Ajustes, la vista grande de Llantas, la música en
+  grande y el modo estacionado se acomodan solos para caber, sin cambiar el tamaño de tu inicio. Los cuadros de cada
+  llanta ya no se enciman.
+- La lista de Archivos sin música (o sin permiso) ahora se desplaza: el botón «Elegir carpeta» ya no queda fuera en
+  pantallas bajas.
+
+## [1.4.164] - 2026-11-16
+
+### Arreglado
+- **Música por Bluetooth en pantallas con app de Bluetooth de marca** (Essgoo y parecidas, issue #13): la canción y el
+  artista ya se muestran, y play, pausa, siguiente y anterior controlan la música en vez de abrir «BT Music» cada vez.
+  También sirve deslizar la tarjeta para cambiar de canción.
+- **El botón de Bluetooth de la barra** abre la pantalla de emparejar («Bluetooth»), no la de la música («BT Music»),
+  cuando la app trae las dos.
+- Los reportes ya no se llenan con el mismo aviso de Bluetooth repetido: se ve lo que pasó antes.
+
+## [1.4.163] - 2026-11-16
+
+Auditoría total: cada parte de la app revisada archivo por archivo, con una segunda revisión independiente antes de publicar.
+
+### Nuevo
+- **Más idiomas, descargables:** francés, turco y portugués en Ajustes → Inicio y apariencia → Interfaz → Idioma →
+  Más idiomas. Se bajan al elegirlos (la app sigue igual de ligera) y lo que falte de traducir sale en inglés. Cualquiera
+  puede aportar un idioma: ver `translations/` en GitHub.
+- **Ocultar la barra de LiteDash** y una pestaña **Barra** en Ajustes → Inicio y apariencia con toda su configuración
+  (botones, apps favoritas, posición, estilo y tamaño). Oculta, el inicio gana su lugar sin mover tus widgets; para verla
+  y entrar a Ajustes, deja presionado cualquier lugar del inicio.
+- **Códigos de falla en tu idioma:** las descripciones del Taller también se traducen con los idiomas descargables.
+- Los radios de descarga del mapa sin conexión se muestran en millas si usas millas.
+
+### Cambiado
+- **Llantas: la calibración y el historial van con el sensor**, no con la posición: al rotar las llantas o cambiar un
+  sensor de lugar, su ajuste se va con él. Tu calibración actual se conserva.
+- **Sensores de llantas por Bluetooth:** solo se acomodan solos con la pantalla de Llantas abierta, y uno que quitaste
+  ya no regresa por su cuenta.
+- **Avisos de llantas con lecturas viejas:** si ningún sensor ha hablado hace rato, solo se avisa de presión baja y
+  fuga lenta (ya no de temperatura, pila ni fuga rápida con datos viejos).
+- **Enlace con LiteDash Connect más sencillo:** la pantalla busca al celular por su hotspot, su aviso por la red y la
+  última dirección; con LiteDash en segundo plano ya no insiste cada rato.
+- La pestaña «Actualizaciones» de Sistema ahora es «Acerca de» (en la versión de GitHub ahí sigue el botón para
+  buscar versiones). Se quitó «Cámaras · Pronto» de Módulos.
+- El actualizador (versión de GitHub) siempre pide confirmar y verifica la descarga antes de instalar.
+
+### Arreglado
+- **Radio FM de fábrica:** LiteDash ya solo la calla cuando sabe que está sonando; antes podía mandarle una pausa a
+  ciegas y, en radios que alternan con cualquier tecla, prenderla.
+- **Música:** reproducir, pausar y cambiar de canción siguen un solo camino para todas las fuentes (app, archivos,
+  Bluetooth y radio), con menos casos raros al cambiar de una a otra.
+- **Escáner OBD:** una sola regla de reintentos (ya no se queda intentando si nadie lo usa) y mensajes de error que
+  dicen qué pasó.
+- **Clima:** un pronóstico guardado de hace días ya no se muestra como el de hoy.
+- **Fotos de widgets y fondos** tomadas con la cámara ya no salen acostadas; elegir una imagen dañada avisa en vez de
+  fallar en silencio.
+- **Barra lateral con muchos botones** en pantallas chicas: Ajustes siempre queda a la vista.
+- Con LiteDash abierto dos veces (como inicio y como app), el volante y los avisos ya solo los atiende la ventana al frente.
+- Decenas de correcciones menores de textos, memoria y casos poco comunes encontradas en la revisión.
+
+## [1.4.162] - 2026-11-16
+
+Revisión completa de la semana: errores reportados, pedidos de la comunidad y limpieza.
+
+### Arreglado
+- **El mapa arranca en lo más cerca e inclinado**, también detenido (antes se abría alejado y plano).
+- **El mapa ya no parpadea al acercar o alejar:** el zoom es continuo, las calles no desaparecen mientras llegan las
+  nuevas, tu flecha y los nombres no cambian de tamaño, y la inclinación baja poco a poco al alejarlo. Centrar es una
+  sola animación y abrir el mapa en grande ya no empieza vacío.
+- **Bluetooth de fábrica con dos pantallas** («Bluetooth» y «BT Music» en la misma app): al dar play se abre la de la
+  música, no la de emparejar.
+- **La radio FM de fábrica ya no se queda sonando** encima de tu música: al dar play a la música, LiteDash la calla.
+- **«No logramos que suene» falso** con el Bluetooth: la revisión del sonido espera más y ya no confunde la app de
+  Bluetooth de la pantalla con otra app.
+- **Música de una memoria USB** en pantallas con Android 7 a 10 que no la encontraban; si Android no da el sonido,
+  ahora se avisa en vez de quedarse callado.
+- **Volumen en pantallas NWD** (y otras donde lo lleva el equipo): los botones de LiteDash y del volante ahora mandan
+  la tecla de volumen de la pantalla.
+- **Llantas en modo Demo:** ya no sale el aviso de llanta baja en el inicio (era de la demostración).
+- **Escáner OBD por Bluetooth:** reintenta solo cuando la conexión falla al primer intento (adaptadores de baja
+  energía y clones clásicos).
+- **Día y noche con las luces del auto:** si tu pantalla no avisa de los faros, lo dice y te deja usar la hora del
+  sol; ya no aprende ajustes que no son de luces.
+- **Reloj** con la hora correcta cuando la pantalla cambia de zona horaria después de encender.
+- **Taller:** si negaste el permiso de Bluetooth, hay un botón para darlo en los ajustes de Android.
+- El mapa en grande abierto desde la barra usa el aspecto de tu widget Mapa; los acomodos guardados dañados se
+  reparan al cargar; los atajos a los ajustes de Android aparecen en pantallas que esconden Ajustes.
+
+### Nuevo
+- **Cualquier app de navegación:** en Ajustes → Apps → Navegación aparecen todas las apps de mapas instaladas
+  (OsmAnd, Organic Maps, Sygic, HERE, Magic Earth, Vela Maps y más), no solo cinco.
+- **Desliza la tarjeta de música** (o de radio) a la izquierda o a la derecha para pasar a la siguiente o regresar.
+
+### Cambiado
+- El respaldo de Android ya no incluye los mapas sin conexión ni los autos descargados (ocupaban tanto que no se
+  respaldaba nada), ni el enlace con tu celular.
+- Los reportes traen más datos para diagnosticar llantas, volumen, memorias USB y el escáner.
+
+## [1.4.161] - 2026-11-14
+
+### Cambiado
+- **Música y radio en grande, rediseñadas:** con espacio, carátula grande a un lado y, al otro, el título centrado, la
+  barra de avance con el tiempo que va y el total, y botones más grandes y con aire.
+- **Barra de avance en la música de tus archivos** (USB o carpeta): antes no salía porque esas canciones no traían
+  duración. El widget Música, si es alto, también muestra los tiempos.
+- **El mapa es el mismo en el widget y en grande:** lo que muevas o acerques se conserva al abrirlo y al cerrarlo.
+- **Centrar se ve:** el mapa se desliza hasta ti y luego se acerca paso a paso, en vez de saltar.
+
+## [1.4.160] - 2026-11-14
+
+### Cambiado
+- **Tu posición siempre es una flecha, más grande.** Antes, sin rumbo del GPS, se veía un punto.
+- **El mapa se inclina en lo más cerca**, también detenido o al acercarlo con dos dedos (antes solo de viaje), y se
+  acerca un poco más (como Waze). Alejado, plano.
+- **Centrar** tiene un ícono de mira y te regresa a lo más cerca, inclinado. Detenido, el mapa ya no se centra solo
+  si lo moviste; de viaje sí, tras 20 segundos.
+- **Mapas sin conexión:** toca una zona guardada para verla en el mapa con su círculo, y volver a bajarla o borrarla.
+- Los tamaños se ven en MB, GB o TB.
+
+## [1.4.159] - 2026-11-14
+
+### Cambiado
+- **El mapa de viaje se ve como Waze:** al manejar se acerca mucho más (un par de calles a los lados), tu flecha va
+  hasta abajo para ver más camino adelante y la inclinación es más suave.
+
+## [1.4.158] - 2026-11-14
+
+### Arreglado
+- **El mapa siempre mira hacia adelante, como Waze:** en pantallas cuyo GPS no da el rumbo (o lo da en 0°), la flecha
+  avanzaba de lado. Ahora, si el rumbo del GPS no es confiable, LiteDash lo calcula con tu avance.
+
+## [1.4.157] - 2026-11-14
+
+### Agregado
+- **Opciones del mapa en Ajustes → Apps → Navegación:** «App de mapas», «Mapa de LiteDash» (estilo, orientación, zoom y
+  colores, con vista previa; se aplica a todos tus widgets Mapa) y «Sin conexión».
+- **Elige la zona a descargar en un mapa:** se ve el círculo del radio y puedes arrastrarlo a otro lugar («Mi ubicación»
+  regresa a ti). Ahora también de 100 y 200 km, con el espacio libre y un aviso si la zona es grande.
+
+### Cambiado
+- **El mapa siempre es plano.** De viaje (andando o con Waze/Maps navegando) se acerca hasta ver un par de calles y se
+  inclina como Waze, siempre hacia donde vas; si lo alejas con dos dedos vuelve a ser plano. Se quitó la opción «Vista».
+- **Velocímetro sin fondo:** sobre tu fondo de pantalla el aro y los textos apagados ahora son translúcidos (antes se
+  veía una mancha gris).
+
+### Arreglado
+- La música de una carpeta o USB muestra el título y el artista que trae la canción (antes, el nombre del archivo).
+
+## [1.4.156] - 2026-11-14
+
+### Agregado
+- **Mapa sin conexión:** en Personalizar mapa → Sin conexión bajas tu zona (10, 25 o 50 km; te dice cuánto pesa) y el
+  mapa minimalista funciona sin internet. Abajo del mapa se ve si es «Mapa en línea» o «Mapa sin conexión». Las zonas
+  guardadas se pueden volver a bajar o borrar.
+- **Nombres de las calles** en el mapa minimalista, siempre derechos (también en la vista inclinada, como en Waze), y
+  la calle donde vas en una pastilla abajo.
+- **Edificios** de cerca y avenidas con más color: se ve por dónde se cruza la ciudad.
+- **Mueve el mapa con un dedo:** aparece un botón para regresar a ti, y si lo dejas, regresa solo a los 20 segundos.
+
+### Cambiado
+- Tu flecha se desliza entre una lectura del GPS y la siguiente en vez de brincar cada segundo (quieto no se mueve nada).
+
+### Arreglado
+- En algunas pantallas (TS10) quedaba un hueco abajo después de encender el auto: LiteDash vuelve a medir la pantalla
+  mientras termina de arrancar. El reporte ahora dice el tamaño de la ventana y de las barras del sistema.
+
+## [1.4.155] - 2026-11-14
+
+### Agregado
+- **Fondos de LiteDash:** en Fondo de pantalla hay 10 fondos para elegir (auroras, la Tierra de noche desde la Estación
+  Espacial, la Vía Láctea, dunas al atardecer y abstractos propios). Se bajan de litedash.dev solo cuando tocas uno, así
+  que la app no pesa más; ya bajado queda guardado y no vuelve a usar internet. Sin conexión, sigue tu foto.
+- **Mapa con dos dedos:** júntalos para alejar y sepáralos para acercar; ya no se aleja con toques.
+
+### Cambiado
+- Con «Usar app externa en accesos directos» apagado, el widget Mapa ya no trae el botón a Waze o Maps ni hay toque que
+  te saque de LiteDash: todo abre el mapa de LiteDash en grande.
+
+## [1.4.154] - 2026-11-14
+
+### Agregado
+- **Música y radio en grande con un toque:** toca el widget Música o Radio fuera de sus botones y la pantalla Música crece
+  desde él a pantalla completa (la radio, ya en su pestaña). La barra de apps se queda para cambiar entre música y mapa.
+- **Archivos, Bluetooth o App desde la música en grande:** arriba de lo que suena eliges de dónde suena, sin ir a Ajustes.
+- **Ajustes → Apps → Navegación → Usar app externa en accesos directos:** prendido (como siempre), el botón del mapa de la
+  barra, el del volante y un toque al widget Mapa abren Waze o Maps. Apagado, abren el mapa de LiteDash a pantalla
+  completa, con la siguiente vuelta, Casa y Trabajo y un botón a tu app de mapas.
+
+### Cambiado
+- La pantalla Música ya no ocupa media pantalla: llena el tablero y crece con una animación (desde su widget o desde el
+  centro si la abres con la barra o el volante).
+- Plantillas: solo dos grupos, pantallas horizontales y verticales (antes chicas, medianas y grandes); cada plantilla se
+  acomoda sola al tamaño de tu pantalla y no se repiten las que en la tuya quedan iguales.
+
+## [1.4.153] - 2026-11-14
+
+### Agregado
+- **Calibración del sonido:** la primera vez que suenan el Bluetooth de tu celular o la radio de la pantalla, LiteDash
+  prueba solo las formas conocidas de hacerlos sonar en tu marca de pantalla (TopWay, FYT, NWD, HCN, Autochips, Jancar y
+  más) y se queda con la que funciona. Si no puede saber si ya se oye, te pregunta en el mismo widget: «¿Se escucha?» Sí /
+  No. Si nada funciona, te ofrece mandar un reporte con lo que se probó.
+- **Ajustes → Apps → Música → Calibrar sonido:** qué ajuste usa tu pantalla para el Bluetooth y la radio, y «Calibrar otra
+  vez» si algo deja de sonar.
+- **Lo que funcionó en una pantalla ayuda a las demás:** el ajuste que encontró la tuya va en las estadísticas anónimas
+  (puedes apagarlas en Ajustes → Sistema → Estadísticas) y, revisado por nosotros, otras pantallas iguales lo usan a la
+  primera, sin preguntar.
+
+### Cambiado
+- Las pantallas NWD y Jancar con su propia app de Bluetooth ahora se reconocen como fuente Bluetooth.
+
+## [1.4.152] - 2026-11-13
+
+### Arreglado
+- **Pantallas TopWay: la música del celular por Bluetooth no se oía.** En las pantallas con la app de Bluetooth de
+  fábrica `com.tw.bt` (chip propio) la canción salía sonando en la pantalla y en el celular, pero no llegaba a las
+  bocinas: la pantalla solo deja pasar ese audio cuando alguien elige su entrada de Bluetooth, y eso lo hacía únicamente
+  la app de fábrica al entrar a su Música. Ahora, cuando tu celular con LiteDash Connect empieza a sonar, LiteDash elige
+  esa entrada solo; al irse el celular o al cambiar de método, regresa al audio normal de la pantalla.
+
+## [1.4.151] - 2026-11-13
+
+### Arreglado
+- **Pantallas angostas (celular de pie):** en Ajustes → Módulos los nombres ya no se cortan ("Escáner OBD", "Llantas
+  (TPMS)"): van en dos renglones si hace falta y la etiqueta «Pronto» baja debajo del nombre. En el Taller, el campo de
+  la dirección del OBD por Wi‑Fi conserva su ancho y los botones pasan al renglón de abajo.
+
+## [1.4.150] - 2026-11-13
+
+### Arreglado
+- **OBD por Wi‑Fi en Android 17:** sin el permiso de red local (Dispositivos cercanos) el adaptador nunca conectaba y
+  no se decía por qué. Ahora el Taller lo pide al conectar; si ya lo negaste, te lleva a los permisos de Android y, al
+  volver con el permiso dado, conecta solo.
+
+## [1.4.149] - 2026-11-13
+
+### Arreglado
+- **Ajustes → Celular en Android 17:** al entrar, Android abría y cerraba sin parar su ventana "Elige un dispositivo
+  para conectar" y la pantalla parpadeaba. Android 17 pide un permiso nuevo para la red local (Dispositivos cercanos):
+  ahora LiteDash lo pide con un botón «Permitir» y, mientras no lo tenga, no intenta buscar al celular.
+
+## [1.4.148] - 2026-11-12
+
+### Agregado
+- **Cambia tu auto desde el celular** (con LiteDash Connect 0.6.0): color, acabado, brillo, nombre y el modelo del
+  catálogo. La pantalla lo aplica al momento; si no tiene internet, el celular le pasa el auto por el enlace (solo
+  imágenes, revisadas con su huella antes de instalarse).
+- **El estado de tu auto en el celular:** si lo pide LiteDash Connect, la pantalla le manda una foto del viaje, del
+  motor (códigos, batería y temperatura) y de las llantas, de los módulos que tengas prendidos.
+- **Reportes con los dos lados:** cuando mandas un reporte desde el celular, va también el diagnóstico de la pantalla.
+
+### Arreglado
+- **Ajustes → Apps → Música (Archivos):** "Elegir carpeta" y "Quitar carpeta" ya no se enciman con las pestañas de
+  "Tu música" en pantallas de 1024×600.
 
 ## [1.4.147] - 2026-11-12
 

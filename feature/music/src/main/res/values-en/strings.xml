@@ -8,15 +8,18 @@
     <string name="no_song_info">No song info</string>
     <string name="opening_app">Opening %1$s…</string>
     <string name="opening_wait">Almost there: it starts in a moment.</string>
-    <string name="source_usb">Files</string>
+    <string name="source_files">Files</string>
     <string name="source_bluetooth">Bluetooth</string>
     <string name="source_radio">Radio</string>
     <string name="bluetooth_connect_phone">Connect your phone over Bluetooth</string>
+    <string name="music_from_phone">Control the music from your phone</string>
+    <string name="music_phone_link">Use LiteDash Connect</string>
     <string name="usb_drive">USB drive</string>
     <string name="usb_drive_in">USB drive connected: %1$s</string>
     <string name="player_connecting">Connecting…</string>
     <string name="radio">Radio</string>
     <string name="radio_explain">Control your screen\'s radio (and internet radio if you turn it on). Needs notification access.</string>
+    <string name="music_shuffle">Shuffle</string>
     <string name="radio_internet">Internet</string>
     <string name="radio_fm">Screen FM</string>
     <string name="radio_unlinked">Link your screen\'s radio in Settings or turn on internet radio</string>
@@ -24,6 +27,7 @@
     <string name="mode_app">App</string>
     <string name="radio_fm_label">FM radio</string>
     <string name="sound_question">Can you hear it?</string>
+    <string name="sound_question_muted">Can you hear it? Note: the music volume is at 0</string>
     <string name="sound_yes">Yes</string>
     <string name="sound_no">No</string>
     <string name="sound_failed">Couldn\'t make it play</string>

@@ -1,13 +1,13 @@
 package com.irvingguerra.litedash
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import com.irvingguerra.litedash.core.ui.Icons
 import com.irvingguerra.litedash.core.vehicle.Signal
-import com.irvingguerra.litedash.core.vehicle.Source
 import com.irvingguerra.litedash.core.vehicle.watch
 import com.irvingguerra.litedash.feature.car.CarStill
 import com.irvingguerra.litedash.feature.obd.CHARGING_MAX_V
@@ -17,7 +17,7 @@ import com.irvingguerra.litedash.feature.obd.RESTING_MIN_V
 import java.util.Locale
 
 /**
- * Velocímetro de arco: número grande y el arco que se llena. Lee la velocidad del
+ * Velocímetro en el estilo de su [GaugeLook] (de fábrica, la Esfera). Lee la velocidad del
  * auto (OBD) si hay adaptador conectado; si no, del GPS (pide permiso la primera vez).
  */
 @Composable
@@ -32,45 +32,51 @@ fun SpeedometerTile(d: Dependencies, look: GaugeLook) {
     if (!obdOn) KeepTripRunning(d.trip)
     val kmh = d.bus.watch(Signal.SPEED)
     val miles = d.prefs.units.miles
-    SpeedGaugeCard((kmh ?: 0f).toMiles(miles), miles, speedTag(d), look, d.prefs.carColor, speedFront(d, look))
+    SpeedGaugeCard((kmh ?: 0f).toMiles(miles), miles, speedTag(d), look, d.prefs.carColor, rememberSpeedFront(d, look))
 }
 
 /**
  * Lo que va al frente del velocímetro: tu auto quieto (de frente, sin reflejo) o tu imagen; null si
- * no se pidió nada, no hay auto instalado o aún no hay imagen.
+ * no se pidió nada, no hay auto instalado o aún no hay imagen. Se arma una vez por cambio, no con cada lectura.
  */
-fun speedFront(d: Dependencies, look: GaugeLook): (@Composable (Modifier) -> Unit)? = when (look.front) {
-    GaugeFront.NONE -> null
-    GaugeFront.CAR -> d.cars.pkg(d.prefs.carModel)?.let { pkg -> { m -> CarStill(d.cars, pkg, d.prefs.carPaint, m, reflection = false) } }
-    GaugeFront.IMAGE -> look.image.takeIf { it.isNotEmpty() }?.let { name -> { m -> SavedTileImage(name, m) } }
+@Composable
+fun rememberSpeedFront(d: Dependencies, look: GaugeLook): (@Composable (Modifier) -> Unit)? {
+    // Solo se busca el auto si va al frente (es barato: está en memoria).
+    val pkg = if (look.front == GaugeFront.CAR) d.cars.pkg(d.prefs.carModel) else null
+    val paint = d.prefs.carPaint
+    return remember(look.front, look.image, pkg, paint) {
+        when (look.front) {
+            GaugeFront.NONE -> null
+            GaugeFront.CAR -> pkg?.let { { m: Modifier -> CarStill(d.cars, it, paint, m, reflection = false) } }
+            GaugeFront.IMAGE -> look.image.takeIf { it.isNotEmpty() }?.let { name -> { m: Modifier -> SavedTileImage(name, m) } }
+        }
+    }
 }
 
-/** De dónde viene la velocidad (OBD, GPS o CAN), para la etiqueta del velocímetro. */
-fun speedTag(d: Dependencies) = when (d.bus.source(Signal.SPEED)) {
-    Source.OBD -> "OBD"
-    Source.GPS -> "GPS"
-    Source.CAN -> "CAN"
-    null -> ""
-}
+/** De dónde viene la velocidad (OBD, GPS, CAN…: el nombre de su fuente, que ya es la sigla), para la etiqueta del velocímetro. */
+fun speedTag(d: Dependencies) = d.bus.source(Signal.SPEED)?.name.orEmpty()
 
 /**
  * La tarjeta del velocímetro con [speed] ya en la unidad que se ve (km/h o mph): la
- * usan la pieza y la vista previa de Personalizar medidor. [front]: ver [speedFront].
+ * usan la pieza y la vista previa de Personalizar medidor. [front]: ver [rememberSpeedFront].
  */
 @Composable
 fun SpeedGaugeCard(speed: Float, miles: Boolean, tag: String, look: GaugeLook, carColor: Color, front: (@Composable (Modifier) -> Unit)? = null) {
     val max = look.speedMax(miles).toFloat()
     // Marcas cada 20 km/h (10 mph); con 240 o más, cada 40 (20 mph) para que no se amontonen.
     val ticks = ticksFor(max, miles)
+    val locale = currentLocale()
+    // Los números de las marcas, con los dígitos del idioma: una vez por tope, no en cada cuadro.
+    val labels = remember(max, ticks, locale) { List(ticks + 1) { i -> String.format(locale, "%d", (max * i / ticks).toInt()) } }
     GaugeCard(
-        number = String.format(currentLocale(), "%.0f", speed),
+        number = String.format(locale, "%.0f", speed),
         unit = speedUnit(miles),
         tag = tag,
         fraction = speed / max,
         ticks = ticks,
         look = look,
         carColor = carColor,
-        labels = { i -> (max * i / ticks).toInt().toString() },
+        labels = labels,
         front = front,
         title = stringResource(R.string.speed_title),
         arc = true,
@@ -104,19 +110,36 @@ class GaugeSpec(
     val warning: (Float) -> Boolean = { false },
     /** Desde dónde va la zona roja (unidad del bus); null = el último 20 %. */
     val red: Float? = null,
+    /** En unidades de EE. UU., un rango propio con números redondos (convertido tal cual salían 12, 24, 35…). */
+    val imperial: ImperialScale? = null,
 ) {
+    /** Hasta dónde llega el arco (unidad del bus) con estas unidades. */
+    fun maxFor(units: UnitChoice) = imperial?.takeIf { units.miles }?.max ?: max
+
+    /** Cuántas marcas lleva con estas unidades. */
+    fun ticksFor(units: UnitChoice) = imperial?.takeIf { units.miles }?.ticks ?: ticks
+
     /** Qué tanto del arco se llena, con el valor del bus. */
-    fun fraction(v: Float) = (v - min) / (max - min)
+    fun fraction(v: Float, units: UnitChoice) = (v - min) / (maxFor(units) - min)
 
     /** Dónde empieza la zona roja (0–1). */
-    val redFrom get() = red?.let(::fraction) ?: 0.8f
+    fun redFrom(units: UnitChoice) = red?.let { fraction(it, units) } ?: 0.8f
 
-    /** El número de la marca [i] de [ticks], en la unidad que se ve (las rpm en miles). */
+    /** El número de la marca [i], en la unidad que se ve (las rpm en miles). */
     fun label(i: Int, units: UnitChoice, locale: Locale): String {
-        val v = shown(min + (max - min) * i / ticks, units)
-        return String.format(locale, "%.0f", if (shown(max, units) >= 1000f) v / 1000f else v)
+        val max = maxFor(units)
+        val v = shown(min + (max - min) * i / ticksFor(units), units).let { if (shown(max, units) >= 1000f) it / 1000f else it }
+        // Un cero con error de redondeo (-0.000001) no sale como "-0".
+        return String.format(locale, "%.0f", if (kotlin.math.abs(v) < 0.5f) 0f else v)
     }
 }
+
+/** El rango en millas de un medidor: hasta [max] (unidad del bus) en [ticks] marcas. */
+class ImperialScale(val max: Float, val ticks: Int)
+
+// km/l → millas por galón y litros → galones (EE. UU.).
+private const val MPG_PER_KML = 2.352f
+private const val GAL_PER_L = 0.2642f
 
 val GaugeSpecs = listOf(
     GaugeSpec(
@@ -141,15 +164,15 @@ val GaugeSpecs = listOf(
     ),
     GaugeSpec(
         Signal.CONSUMPTION, R.string.gauge_consumption, R.string.gauge_consumption_tag, Icons.drop, ticks = 6,
-        // km/l a millas por galón (EE. UU.).
-        shown = { v, u -> if (u.miles) v * 2.352f else v }, unit = { if (it.miles) R.string.unit_mpg else R.string.unit_kml }, decimals = 1,
-        min = 0f, max = 30f,
+        shown = { v, u -> if (u.miles) v * MPG_PER_KML else v }, unit = { if (it.miles) R.string.unit_mpg else R.string.unit_kml }, decimals = 1,
+        // 0–70 mpg de 10 en 10.
+        min = 0f, max = 30f, imperial = ImperialScale(70f / MPG_PER_KML, 7),
     ),
     GaugeSpec(
         Signal.BOOST, R.string.gauge_boost, R.string.gauge_boost_tag, Icons.turbo, ticks = 8,
-        // El turbo se habla en psi (también en México).
+        // El turbo se habla en psi (también en México): −15…25 psi para que la escala vaya de 5 en 5.
         shown = { v, _ -> v * 0.145f }, unit = { R.string.unit_psi }, decimals = 1,
-        min = -100f, max = 170f,
+        min = -15f / 0.145f, max = 25f / 0.145f,
     ),
     GaugeSpec(
         Signal.THROTTLE, R.string.gauge_throttle, R.string.gauge_throttle_tag, Icons.pedal, ticks = 5,
@@ -163,9 +186,9 @@ val GaugeSpecs = listOf(
     ),
     GaugeSpec(
         Signal.FUEL_RATE, R.string.gauge_fuel_rate, R.string.gauge_fuel_rate_tag, Icons.fuel, ticks = 6,
-        // Litros por hora a galones (EE. UU.) por hora.
-        shown = { v, u -> if (u.miles) v * 0.2642f else v }, unit = { if (it.miles) R.string.unit_galh else R.string.unit_lh }, decimals = 1,
-        min = 0f, max = 30f,
+        shown = { v, u -> if (u.miles) v * GAL_PER_L else v }, unit = { if (it.miles) R.string.unit_galh else R.string.unit_lh }, decimals = 1,
+        // 0–8 gal/h de 1 en 1.
+        min = 0f, max = 30f, imperial = ImperialScale(8f / GAL_PER_L, 8),
     ),
 )
 
@@ -199,17 +222,18 @@ fun GaugeTile(d: Dependencies, signal: String, look: GaugeLook, onPick: () -> Un
 @Composable
 fun SpecGaugeCard(spec: GaugeSpec, value: Float?, units: UnitChoice, look: GaugeLook, carColor: Color, onClick: (() -> Unit)? = null, note: String? = null) {
     val locale = currentLocale()
+    val labels = remember(spec, units, locale) { List(spec.ticksFor(units) + 1) { spec.label(it, units, locale) } }
     GaugeCard(
         number = value?.let { gaugeText(spec, it, units, locale) } ?: "—",
         unit = stringResource(spec.unit(units)),
         // La nota (sin OBD, conectando…) va donde va la etiqueta del dato.
         tag = note ?: spec.tag?.let { stringResource(it) } ?: "",
-        fraction = value?.let(spec::fraction) ?: 0f,
-        ticks = spec.ticks,
+        fraction = value?.let { spec.fraction(it, units) } ?: 0f,
+        ticks = spec.ticksFor(units),
         look = look,
         carColor = carColor,
-        labels = { spec.label(it, units, locale) },
-        redFrom = spec.redFrom,
+        labels = labels,
+        redFrom = spec.redFrom(units),
         warning = value != null && spec.warning(value),
         onClick = onClick,
         title = stringResource(spec.name),

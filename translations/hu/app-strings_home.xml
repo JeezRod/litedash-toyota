@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="road_speed">Sebesség</string>
+    <string name="road_speed_text">Csak a szám</string>
+    <string name="road_speed_gauge">Sebességmérő</string>
+    <string name="road_speed_show">Sebesség mutatása</string>
+    <string name="trip_time">Idő</string>
+    <string name="trip_average">Átlag</string>
+    <string name="road_trip_distance">Távolság</string>
+    <string name="trip_heading">Irány</string>
+    <string-array name="compass_points">
+        <item>É</item>
+        <item>ÉK</item>
+        <item>K</item>
+        <item>DK</item>
+        <item>D</item>
+        <item>DNy</item>
+        <item>Ny</item>
+        <item>ÉNy</item>
+    </string-array>
+    <string name="value_with_unit">%1$s %2$s</string>
+    <string name="two_parts">%1$s · %2$s</string>
+    <string name="weather_degrees">%1$d°</string>
+    <string name="weather_range">%1$d° / %2$d°</string>
+    <string name="page_n">%1$d. oldal</string>
+    <string name="page_add">Oldal hozzáadása</string>
+    <string name="page_remove">Oldal eltávolítása</string>
+    <string name="page_remove_question">Eltávolítod a(z) %1$d. oldalt?</string>
+    <string name="page_remove_message">A widgetjei eltűnnek; az első oldalad és a többi megmarad.</string>
+    <string name="page_background_title">A(z) %1$d. oldal háttere</string>
+    <string name="page_background_image">Kép</string>
+    <string name="page_background_map">Térkép</string>
+    <string name="map_backdrop_help">A térkép követ a widgetjeid mögött, téged a szabad helyen mutatva. A stílusa a Beállítások → Alkalmazások → Navigáció szerinti; internet nélkül az offline területeidet használja.</string>
+    <string name="map_backdrop_has_widget">Ezen az oldalon van Térkép widget: térképes háttérrel kettőt látnál.</string>
+    <string name="map_backdrop_remove_widget">Térkép widget eltávolítása</string>
+</resources>

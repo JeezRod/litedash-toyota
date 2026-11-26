@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="road_speed">Tempo</string>
+    <string name="road_speed_text">Nur Zahl</string>
+    <string name="road_speed_gauge">Tacho</string>
+    <string name="road_speed_show">Tempo anzeigen</string>
+    <string name="trip_time">Zeit</string>
+    <string name="trip_average">Schnitt</string>
+    <string name="road_trip_distance">Strecke</string>
+    <string name="trip_heading">Richtung</string>
+    <string-array name="compass_points">
+        <item>N</item>
+        <item>NO</item>
+        <item>O</item>
+        <item>SO</item>
+        <item>S</item>
+        <item>SW</item>
+        <item>W</item>
+        <item>NW</item>
+    </string-array>
+    <!-- A number with its unit ("12.3 km") and two pieces on one line ("Insurance · in 3 days") -->
+    <string name="value_with_unit">%1$s %2$s</string>
+    <string name="two_parts">%1$s · %2$s</string>
+    <string name="weather_degrees">%1$d°</string>
+    <string name="weather_range">%1$d° / %2$d°</string>
+    <string name="page_n">Seite %1$d</string>
+    <string name="page_add">Seite hinzufügen</string>
+    <string name="page_remove">Seite entfernen</string>
+    <string name="page_remove_question">Seite %1$d entfernen?</string>
+    <string name="page_remove_message">Ihre Widgets verschwinden; deine erste Seite und die anderen bleiben.</string>
+    <string name="page_background_title">Hintergrund von Seite %1$d</string>
+    <string name="page_background_image">Bild</string>
+    <string name="page_background_map">Karte</string>
+    <string name="map_backdrop_help">Die Karte folgt dir hinter deinen Widgets, mit dir im freien Bereich. Ihr Stil ist der aus Einstellungen → Apps → Navigation; ohne Internet nutzt sie deine Offline-Zonen.</string>
+    <string name="map_backdrop_has_widget">Diese Seite hat ein Karten-Widget: mit der Karte im Hintergrund siehst du zwei.</string>
+    <string name="map_backdrop_remove_widget">Karten-Widget entfernen</string>
+</resources>

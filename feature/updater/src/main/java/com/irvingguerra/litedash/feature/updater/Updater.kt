@@ -19,15 +19,16 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import androidx.core.content.FileProvider
 import androidx.core.content.IntentCompat
 import com.irvingguerra.litedash.core.ui.Https
+import com.irvingguerra.litedash.core.ui.isRecent
 
 /** Una versión publicada en GitHub Releases, más nueva que la instalada. */
 @Immutable
 data class Version(
     val name: String,
-    val code: Long,
     val notes: String,
     val apk: String,
     val checksums: String?,
@@ -35,18 +36,19 @@ data class Version(
 )
 
 /**
- * Busca, baja e instala versiones nuevas desde GitHub Releases. Solo existe en la
- * variante `github` (Play prohíbe que una app se actualice por fuera de la tienda):
- * con [apiUrl] vacío está apagado. Revisa solo al volver a LiteDash (a lo más cada
- * [QUIET_EVERY_MS], sin polling) y cuando el usuario toca "Buscar actualizaciones".
- * La descarga corre en su propio scope: sigue aunque se cierre Ajustes ([progress]).
+ * Busca, baja e instala versiones nuevas desde GitHub Releases. Solo viaja en la
+ * variante `github` (Play prohíbe que una app se actualice por fuera de la tienda).
+ * Revisa solo al volver a LiteDash (a lo más cada [QUIET_EVERY_MS], sin polling) y
+ * cuando el usuario toca "Buscar actualizaciones". [currentVersion] es el versionName
+ * instalado (X.Y.Z). La descarga corre en su propio scope: sigue aunque se cierre
+ * Ajustes ([progress]).
  */
 class Updater(
     private val context: Context,
     private val apiUrl: String,
-    private val currentCode: Long,
+    currentVersion: String,
 ) {
-    val available get() = apiUrl.isNotBlank()
+    private val current = releaseOf(currentVersion)
 
     private val store by lazy { context.getSharedPreferences("updates", Context.MODE_PRIVATE) }
 
@@ -54,6 +56,7 @@ class Updater(
     private val scope = MainScope()
 
     /** Descarga o instalación en curso (o la última que falló); null = nada. */
+    @Immutable
     sealed interface Progress {
         data class Downloading(val v: Version, val percent: Int) : Progress
         data class Installing(val v: Version, val apk: File) : Progress
@@ -63,20 +66,33 @@ class Updater(
     var progress by mutableStateOf<Progress?>(null)
         private set
 
+    /** Por qué falló la última descarga (red, suma, espacio…), para el reporte técnico; null = no falló. */
+    var downloadError: String? = null
+        private set
+
     /** Baja [v], la verifica y se la pasa al instalador de Android; una a la vez. */
     fun downloadAndInstall(v: Version) {
         if (progress is Progress.Downloading) return
         progress = Progress.Downloading(v, 0)
+        downloadError = null
         scope.launch {
             runCatching {
+                var told = 0
                 val apk = download(v) { f ->
-                    // Solo cuando cambia el porcentaje (no en cada bloque de 64 KB).
+                    // Llega del hilo de la descarga: solo cuando cambia el porcentaje (no en cada bloque de 64 KB) y se
+                    // publica en el principal, sin pisar lo que ya pasó después (instalando o fallida).
                     val percent = (f * 100).toInt()
-                    if ((progress as? Progress.Downloading)?.percent != percent) progress = Progress.Downloading(v, percent)
+                    if (percent != told) {
+                        told = percent
+                        scope.launch { if ((progress as? Progress.Downloading)?.v == v) progress = Progress.Downloading(v, percent) }
+                    }
                 }
                 progress = Progress.Installing(v, apk)
                 install(apk)
-            }.onFailure { progress = Progress.Failed }
+            }.onFailure {
+                downloadError = it.message ?: it.javaClass.simpleName
+                progress = Progress.Failed
+            }
         }
     }
 
@@ -102,16 +118,16 @@ class Updater(
      * Sin red o con error no pasa nada: se intenta la próxima vez.
      */
     suspend fun checkQuietly() {
-        if (!available) return
         // El APK de una instalación anterior ya no sirve (si se instaló, esta es la nueva): fuera de la caché.
         if (progress == null) withContext(Dispatchers.IO) {
             for (dir in listOfNotNull(context.cacheDir, context.externalCacheDir)) File(dir, APK_FILE).delete()
         }
         dismissed = store.getString(KEY_DISMISSED, null)
-        if (System.currentTimeMillis() - store.getLong(KEY_LAST, 0L) < QUIET_EVERY_MS) {
+        // Con el reloj atrás (pantalla sin pila: la diferencia sale negativa) también toca revisar.
+        if (isRecent(store.getLong(KEY_LAST, 0L), System.currentTimeMillis(), QUIET_EVERY_MS)) {
             // Sin pedir a GitHub otra vez: lo encontrado antes, si sigue siendo más nuevo.
             found = store.getString(KEY_FOUND, null)?.let { runCatching { fromJson(it) }.getOrNull() }
-                ?.takeIf { it.code > currentCode }
+                ?.takeIf { isNewer(it.name, current) }
             return
         }
         runCatching { checkForUpdate() }
@@ -130,39 +146,20 @@ class Updater(
     }
 
     private suspend fun newest(): Version? = withContext(Dispatchers.IO) {
-        val releases = JSONArray(open(apiUrl).inputStream.bufferedReader().use { it.readText() })
-        (0 until releases.length()).mapNotNull { i ->
-            val r = releases.getJSONObject(i)
-            if (r.optBoolean("draft")) return@mapNotNull null
-            val tag = r.getString("tag_name")
-            val code = versionCode(tag) ?: return@mapNotNull null
-            // Solo versiones normales: nunca se ofrecen versiones de prueba.
-            if (r.optBoolean("prerelease") || isPrerelease(tag)) return@mapNotNull null
-            val assetList = r.optJSONArray("assets") ?: JSONArray()
-            val assets = (0 until assetList.length()).map { assetList.getJSONObject(it) }
-            val apk = assets.firstOrNull { it.getString("name").endsWith(".apk") } ?: return@mapNotNull null
-            Version(
-                name = tag.removePrefix("v"),
-                code = code,
-                notes = r.optString("body").trim(),
-                apk = apk.getString("browser_download_url"),
-                checksums = assets.firstOrNull { it.getString("name") == "SHA256SUMS.txt" }?.getString("browser_download_url"),
-                bytes = apk.optLong("size"),
-            )
-        }.filter { it.code > currentCode }.maxByOrNull { it.code }
+        pickNewest(open(apiUrl).inputStream.bufferedReader().use { it.readText() }, current)
     }
 
-    /** Baja el APK a la caché y lo verifica contra SHA256SUMS.txt. [progress] va de 0 a 1. */
+    /**
+     * Baja el APK a la caché y lo verifica contra SHA256SUMS.txt (cada release lo publica: sin él, o sin el renglón
+     * del APK, no se instala). [progress] va de 0 a 1.
+     */
     suspend fun download(v: Version, progress: (Float) -> Unit): File = withContext(Dispatchers.IO) {
         val target = File(context.cacheDir, APK_FILE)
         val computed = Https.download(context, v.apk, target, v.bytes, GITHUB_JSON, progress)
-        v.checksums?.let { url ->
-            val expected = open(url).inputStream.bufferedReader().readLines()
-                .firstOrNull { it.trim().endsWith(".apk") }?.trim()?.split(Regex("\\s+"))?.firstOrNull()
-            if (expected != null && !expected.equals(computed, ignoreCase = true)) {
-                target.delete()
-                error("El archivo llegó dañado")
-            }
+        val expected = v.checksums?.let { url -> checksumOf(open(url).inputStream.bufferedReader().use { it.readLines() }, apkName(v.name)) }
+        if (expected == null || !expected.equals(computed, ignoreCase = true)) {
+            target.delete()
+            error("El archivo llegó dañado")
         }
         target
     }
@@ -176,10 +173,20 @@ class Updater(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.packageManager.canRequestPackageInstalls()
         else Settings.Secure.getInt(context.contentResolver, Settings.Secure.INSTALL_NON_MARKET_APPS, 0) == 1
 
+    /** Abre el ajuste de Android para permitir instalar; si esta pantalla no lo tiene, queda en [installFailure]. */
     fun requestInstallPermission() {
         val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
         else Intent(Settings.ACTION_SECURITY_SETTINGS)
-        runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        startOrTell(intent)
+    }
+
+    private fun startOrTell(intent: Intent) {
+        try {
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: RuntimeException) {
+            // Sin esa pantalla de Ajustes o sin instalador (ActivityNotFoundException, SecurityException).
+            installFailure = InstallFailure(PackageInstaller.STATUS_FAILURE, e.message ?: e.javaClass.simpleName)
+        }
     }
 
     /**
@@ -190,7 +197,6 @@ class Updater(
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
         }
         val id = installer.createSession(params)
         try {
@@ -214,11 +220,11 @@ class Updater(
     private fun open(url: String) = Https.get(context, url, GITHUB_JSON)
 
     private fun toJson(v: Version) = JSONObject()
-        .put("name", v.name).put("code", v.code).put("notes", v.notes).put("apk", v.apk)
+        .put("name", v.name).put("notes", v.notes).put("apk", v.apk)
         .put("checksums", v.checksums).put("bytes", v.bytes).toString()
 
     private fun fromJson(text: String) = JSONObject(text).run {
-        Version(getString("name"), getLong("code"), optString("notes"), getString("apk"), optString("checksums").ifBlank { null }, optLong("bytes"))
+        Version(getString("name"), optString("notes"), getString("apk"), optString("checksums").ifBlank { null }, optLong("bytes"))
     }
 
     companion object {
@@ -231,8 +237,8 @@ class Updater(
         // Encabezado que pide la API de GitHub (también va en las descargas, que siguen de ahí).
         private const val GITHUB_JSON = "application/vnd.github+json"
 
-        /** Lo último que dijo el instalador de Android (para mostrarlo si falló). */
-        var installError by mutableStateOf<String?>(null)
+        /** Lo último que dijo el instalador de Android si falló (null = nada que decir). */
+        var installFailure by mutableStateOf<InstallFailure?>(null)
 
         /**
          * La confirmación de Android ("¿Instalar?"), para que la abra la pantalla que
@@ -247,34 +253,92 @@ class Updater(
      * archivo"), por si el instalador por sesiones no responde en esta pantalla.
      */
     fun openWithInstaller(apk: File) {
-        // El instalador de Android 6 solo abre archivos (content:// llegó en Android 7): se le pasa
-        // una copia en la carpeta externa de la app, que puede leer sin permisos.
-        val uri = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            val copy = File(context.externalCacheDir ?: return, apk.name)
-            runCatching { apk.copyTo(copy, overwrite = true) }.getOrElse { return }
-            Uri.fromFile(copy)
-        } else {
-            FileProvider.getUriForFile(context, context.packageName + FILE_AUTHORITY_SUFFIX, apk)
+        scope.launch {
+            // El instalador de Android 6 solo abre archivos (content:// llegó en Android 7): se le pasa una copia en la
+            // carpeta externa de la app, que puede leer sin permisos (se copia fuera del hilo principal).
+            val uri = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+                val copied = withContext(Dispatchers.IO) {
+                    runCatching { Uri.fromFile(apk.copyTo(File(context.externalCacheDir ?: throw IOException("sin almacenamiento externo"), apk.name), overwrite = true)) }
+                }
+                copied.getOrElse {
+                    installFailure = InstallFailure(PackageInstaller.STATUS_FAILURE, it.message ?: it.javaClass.simpleName)
+                    return@launch
+                }
+            } else {
+                FileProvider.getUriForFile(context, context.packageName + FILE_AUTHORITY_SUFFIX, apk)
+            }
+            startOrTell(Intent(Intent.ACTION_VIEW).setDataAndType(uri, APK_TYPE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
         }
-        val intent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, APK_TYPE)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        runCatching { context.startActivity(intent) }
     }
 }
+
+/**
+ * De la lista de releases de la API de GitHub, la versión más nueva que [current]: sin borradores ni versiones de
+ * prueba y con su APK. Null = ya tienes la última (o no se sabe cuál tienes).
+ */
+internal fun pickNewest(json: String, current: Long?): Version? {
+    val releases = JSONArray(json)
+    return (0 until releases.length()).mapNotNull { i ->
+        val r = releases.getJSONObject(i)
+        if (r.optBoolean("draft") || r.optBoolean("prerelease")) return@mapNotNull null
+        val tag = r.getString("tag_name")
+        // Solo X.Y.Z: nunca se ofrecen versiones de prueba.
+        if (!isNewer(tag, current)) return@mapNotNull null
+        val assetList = r.optJSONArray("assets") ?: JSONArray()
+        val assets = (0 until assetList.length()).map { assetList.getJSONObject(it) }
+        // Cada release trae `litedash-X.Y.Z.apk` y `litedash.apk` (el del enlace fijo de la web): el de su versión primero.
+        val apk = assets.firstOrNull { it.getString("name") == apkName(tag.removePrefix("v")) }
+            ?: assets.firstOrNull { it.getString("name").endsWith(".apk") } ?: return@mapNotNull null
+        Version(
+            name = tag.removePrefix("v"),
+            notes = r.optString("body").trim(),
+            apk = apk.getString("browser_download_url"),
+            checksums = assets.firstOrNull { it.getString("name") == "SHA256SUMS.txt" }?.getString("browser_download_url"),
+            bytes = apk.optLong("size"),
+        )
+    }.maxByOrNull { releaseOf(it.name)!! }
+}
+
+/** ¿[tag] es una versión normal más nueva que [current]? Sin saber cuál está instalada, nunca. */
+private fun isNewer(tag: String, current: Long?): Boolean {
+    val release = releaseOf(tag) ?: return false
+    return current != null && release > current
+}
+
+/** El APK de la versión [name] en su release. */
+private fun apkName(name: String) = "litedash-$name.apk"
+
+/**
+ * La suma del APK en un SHA256SUMS.txt (`<suma>  <archivo>`): la del renglón de [file] (con o sin el `*` de modo
+ * binario) y, si no está, la del primero que termina en `.apk`.
+ */
+internal fun checksumOf(lines: List<String>, file: String? = null): String? {
+    val rows = lines.map { it.trim().split(WHITESPACE) }.filter { it.size >= 2 }
+    val row = rows.firstOrNull { file != null && it.last().removePrefix("*") == file } ?: rows.firstOrNull { it.last().endsWith(".apk") }
+    return row?.first()
+}
+
+private val WHITESPACE = Regex("\\s+")
 
 /** Debe coincidir con el `provider` del manifiesto de la versión de GitHub. */
 private const val FILE_AUTHORITY_SUFFIX = ".updates"
 private const val APK_TYPE = "application/vnd.android.package-archive"
 
+/**
+ * Por qué no se instaló: [status] es el de Android (`PackageInstaller.STATUS_FAILURE_*`, que la pantalla traduce a
+ * un texto claro) y [message] lo que dijo tal cual (solo para el reporte técnico).
+ */
+@Immutable
+data class InstallFailure(val status: Int, val message: String)
+
 /** Respuestas del instalador de Android: deja su confirmación lista para la pantalla o guarda el error. */
 class InstallReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+        when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
             PackageInstaller.STATUS_PENDING_USER_ACTION ->
                 Updater.confirm = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_INTENT, Intent::class.java)
-            PackageInstaller.STATUS_SUCCESS -> Updater.installError = null
-            else -> Updater.installError = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "?"
+            PackageInstaller.STATUS_SUCCESS -> Updater.installFailure = null
+            else -> Updater.installFailure = InstallFailure(status, intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "?")
         }
     }
 }

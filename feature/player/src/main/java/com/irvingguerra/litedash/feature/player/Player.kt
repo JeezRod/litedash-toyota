@@ -1,7 +1,6 @@
 package com.irvingguerra.litedash.feature.player
 
 import android.annotation.SuppressLint
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -25,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.irvingguerra.litedash.feature.music.Drives
+import com.irvingguerra.litedash.feature.music.OwnShuffle
 import java.util.concurrent.Executors
 
 /** Una canción de la memoria USB o una estación de radio: lo que el reproductor sabe tocar. */
@@ -40,7 +40,7 @@ sealed interface Playable {
 enum class PlayerSource { USB, RADIO }
 
 /** Lo que el reproductor está haciendo, como estado de Compose (lo lee la biblioteca). */
-class PlayerState(
+data class PlayerState(
     val source: PlayerSource?,
     val queue: List<Playable>,
     val index: Int,
@@ -62,6 +62,13 @@ private const val ART_SIDE = 512
 /** Si en este tiempo no empieza a sonar, se da por perdido (la radio puede no contestar). */
 private const val LOAD_TIMEOUT_MS = 25_000L
 
+/** La radio AAC que ya sonaba y se cortó (túnel, cambio de antena): se reintenta estas veces antes de mostrar el error. */
+private const val RADIO_RETRIES = 2
+private const val RADIO_RETRY_MS = 2_000L
+
+/** El volumen mientras otra app habla (la navegación) con el foco "bajar volumen". */
+private const val DUCK_VOLUME = 0.2f
+
 /**
  * El reproductor propio de LiteDash: toca las canciones de la memoria USB y las estaciones
  * de radio por internet con [MediaPlayer], publica una sesión de medios (así la pieza Música
@@ -81,8 +88,10 @@ object Player {
 
     private lateinit var app: Context
     private val main = Handler(Looper.getMainLooper())
-    // Leer carátulas y abrir archivos fuera del hilo principal, de uno en uno.
+    // Abrir el audio fuera del hilo principal, de uno en uno.
     private val io = Executors.newSingleThreadExecutor { Thread(it, "player-io") }
+    // Las etiquetas y la carátula en su propio hilo: el logo de una estación (red, segundos) no retrasa el audio de la siguiente.
+    private val art = Executors.newSingleThreadExecutor { Thread(it, "player-art") }
     private var player: MediaPlayer? = null
     /** Radio AAC en vivo (lo que MediaPlayer no sabe arrancar); null si suena por [player]. */
     private var aac: AacStream? = null
@@ -97,17 +106,25 @@ object Player {
     /** Canciones sin carátula incrustada: no se vuelve a abrir el archivo cada vez que suenan. */
     private val noArt = HashSet<String>()
 
-    /** Llamar una vez (lo hace el app al arrancar): solo guarda el contexto. */
+    /** Llamar una vez (lo hace el app al arrancar): guarda el contexto y conecta el botón de aleatorio. */
     fun init(context: Context) {
         app = context.applicationContext
+        OwnShuffle.attach(PlayerStore(app).shuffle, ::shuffle)
     }
 
-    /** Suena [queue] desde [index]; si ya es lo mismo, solo sigue. */
+    /** La cola en su orden (la de la carpeta o la lista) cuando la que suena va revuelta; null = no va revuelta. */
+    private var ordered: List<Playable>? = null
+
+    /** Suena [queue] desde [index]; si ya es lo mismo, solo sigue. Con aleatorio (USB), lo que sigue va revuelto. */
     fun play(source: PlayerSource, queue: List<Playable>, index: Int) {
         val item = queue.getOrNull(index) ?: return
         requests++
-        if (state.current?.key == item.key && state.queue == queue) return resume()
-        state = PlayerState(source, queue, index, playing = false, buffering = true, error = null)
+        if (state.current?.key == item.key && (state.queue == queue || ordered == queue)) return resume()
+        onPlay?.invoke(source)
+        val shuffled = source == PlayerSource.USB && OwnShuffle.on
+        ordered = queue.takeIf { shuffled }
+        state = if (shuffled) PlayerState(source, shuffledFrom(queue, index), 0, playing = false, buffering = true, error = null)
+        else PlayerState(source, queue, index, playing = false, buffering = true, error = null)
         PlayerStore(app).rememberLast(source, item.key)
         ensureSession()
         start(item)
@@ -117,14 +134,26 @@ object Player {
         val item = state.current ?: return
         // Ya suena o va cargando (arrancará solo al estar listo): otro play no la corta ni la reinicia.
         if (state.playing || state.buffering) return
+        state.source?.let { onPlay?.invoke(it) }
         // La radio en pausa se desconecta: play la vuelve a abrir (igual si se canceló la carga o falló).
         val p = player ?: run {
             update(playing = false, buffering = true)
             return start(item)
         }
-        if (!requestFocus()) return
+        if (!requestFocus()) return noFocus()
         p.start()
         update(playing = true)
+    }
+
+    /**
+     * Android no dio el foco de audio: sin él se quedaba mudo sin decir nada (reporte DA2107). Se avisa en la pieza
+     * (la carga queda lista: play lo vuelve a pedir) y en el registro.
+     */
+    private fun noFocus() {
+        Log.w("LiteDash", "Player: sin foco de audio")
+        state = state.copy(playing = false, buffering = false, error = app.getString(R.string.player_no_focus))
+        publishState()
+        PlaybackService.update(app)
     }
 
     fun pause() {
@@ -149,6 +178,29 @@ object Player {
 
     fun toggle() = if (state.playing) pause() else resume()
 
+    /** La de [index] primero y las demás revueltas. */
+    private fun shuffledFrom(queue: List<Playable>, index: Int): List<Playable> =
+        listOf(queue[index]) + queue.filterIndexed { i, _ -> i != index }.shuffled()
+
+    /**
+     * Prende o apaga el aleatorio sin cortar lo que suena: prendido, lo que sigue se revuelve; apagado, regresa al orden de
+     * la carpeta desde la canción de ahora. Se guarda.
+     */
+    private fun shuffle(on: Boolean) {
+        PlayerStore(app).shuffle = on
+        val s = state
+        val current = s.current ?: return
+        if (s.source != PlayerSource.USB) return
+        if (on && ordered == null) {
+            ordered = s.queue
+            state = s.copy(queue = shuffledFrom(s.queue, s.index), index = 0)
+        } else if (!on) {
+            val back = ordered ?: return
+            ordered = null
+            state = s.copy(queue = back, index = back.indexOfFirst { it.key == current.key }.coerceAtLeast(0))
+        }
+    }
+
     fun next() = skip(1)
     fun previous() = skip(-1)
 
@@ -156,7 +208,9 @@ object Player {
         val s = state
         if (s.queue.isEmpty()) return
         val i = (s.index + by).mod(s.queue.size)
-        state = PlayerState(s.source, s.queue, i, playing = false, buffering = true, error = null)
+        // Pasar de canción en pausa también la pone a sonar: como play, calla la radio de fábrica.
+        if (!s.playing) s.source?.let { onPlay?.invoke(it) }
+        state = s.copy(index = i, playing = false, buffering = true, error = null)
         PlayerStore(app).rememberLast(s.source!!, s.queue[i].key)
         start(s.queue[i])
     }
@@ -180,6 +234,7 @@ object Player {
         session?.release()
         session = null
         shown = null
+        ordered = null
         unwatchUsb()
         state = PlayerState.IDLE
         PlaybackService.stop(app)
@@ -190,29 +245,58 @@ object Player {
         preparedDuration = -1L
         releaseAudio()
         if (item is Track) watchUsb() else unwatchUsb()
-        publishMetadata(item, null)
+        // Lo mismo otra vez (play tras pausar la radio, que la corta): su carátula y etiquetas ya se tienen; el logo de la
+        // estación no se vuelve a bajar.
+        val known = shown?.takeIf { it.first.key == item.key && (it.second != null || it.third != null) }
+        publishMetadata(item, known?.second, known?.third)
         PlaybackService.update(app)
         // Si en un rato no suena, se avisa (la radio puede no contestar nunca).
         main.postDelayed({ if (myLoad == load && state.buffering) fail(app.getString(R.string.player_timeout)) }, LOAD_TIMEOUT_MS)
         if (item is Station && item.isAac) startAac(item, myLoad) else startMediaPlayer(item, myLoad)
-        // La carátula después: en el mismo hilo va la carga del audio, que no espera a un logo lento.
-        io.execute {
+        // La carátula aparte (ver [art]): la carga del audio no espera a un logo lento.
+        if (known != null) return
+        art.execute {
             if (myLoad != load) return@execute
             // Las canciones de una carpeta o USB solo traen el nombre del archivo: título, artista y álbum de sus etiquetas.
             val tags = (item as? Track)?.let(::tagsOf)
             val art = artworkOf(item)
-            main.post { if (myLoad == load) publishMetadata(item, art, tags) }
+            main.post {
+                if (myLoad != load) return@post
+                publishMetadata(item, art, tags)
+                // El aviso también con las etiquetas y la carátula (en Android 6–10 pinta su propio título).
+                PlaybackService.update(app)
+            }
         }
     }
 
-    /** Radio AAC en vivo con el decodificador propio; si el flujo no es AAC, MediaPlayer. */
-    private fun startAac(item: Station, myLoad: Int) {
-        if (!requestFocus()) return update(playing = false, buffering = false)
-        aac = AacStream(app, item.uri.toString(), object : AacStream.Listener {
-            override fun onStarted() { main.post { if (myLoad == load) update(playing = true, buffering = false) } }
+    /**
+     * Radio AAC en vivo con el decodificador propio; si el flujo no es AAC, MediaPlayer. Si ya sonó y se corta (la red del
+     * auto va y viene), se reintenta [RADIO_RETRIES] veces antes de mostrar el error: manejando, eso era tocar la pantalla.
+     */
+    private fun startAac(item: Station, myLoad: Int, retry: Int = 0) {
+        if (!requestFocus()) return noFocus()
+        var sounded = false
+        aac = AacStream(app, item.url, object : AacStream.Listener {
+            override fun onStarted() {
+                sounded = true
+                main.post { if (myLoad == load) update(playing = true, buffering = false) }
+            }
             override fun onNotAac() { main.post { if (myLoad == load) { aac = null; startMediaPlayer(item, myLoad) } } }
-            override fun onError(message: String) { main.post { if (myLoad == load) { Log.w("LiteDash", "Radio AAC: $message"); fail(app.getString(R.string.player_cannot_play)) } } }
-        }).also { it.start() }
+            override fun onError(message: String) {
+                val again = (sounded || retry > 0) && retry < RADIO_RETRIES
+                main.post {
+                    if (myLoad != load) return@post
+                    Log.w("LiteDash", "Radio AAC: $message${if (again) " (otra vez)" else ""}")
+                    if (!again) return@post fail(app.getString(R.string.player_cannot_play))
+                    aac = null
+                    update(playing = false, buffering = true)
+                    main.postDelayed({ if (myLoad == load) startAac(item, myLoad, retry + 1) }, RADIO_RETRY_MS)
+                }
+            }
+        }).also {
+            if (ducked) it.setVolume(DUCK_VOLUME)
+            it.start()
+        }
     }
 
     private fun startMediaPlayer(item: Playable, myLoad: Int) {
@@ -229,13 +313,13 @@ object Player {
                     it.start()
                     update(playing = true, buffering = false)
                 } else {
-                    update(playing = false, buffering = false)
+                    noFocus()
                 }
             }
             setOnCompletionListener { if (myLoad == load && state.current is Track) next() }
             setOnSeekCompleteListener { if (myLoad == load) publishState() }
             setOnErrorListener { _, what, extra ->
-                if (myLoad == load) { Log.w("LiteDash", "MediaPlayer: $what/$extra ${item.uri}"); fail(app.getString(R.string.player_cannot_play)) }
+                if (myLoad == load) { Log.w("LiteDash", "MediaPlayer: $what/$extra ${item.uri}"); fail(cannotPlay(item)) }
                 true
             }
             setOnInfoListener { _, what, _ ->
@@ -246,28 +330,34 @@ object Player {
                 false
             }
         }
+        // La navegación sigue hablando: la canción que empieza (la siguiente) también va baja.
+        if (ducked) p.setVolume(DUCK_VOLUME, DUCK_VOLUME)
         player = p
         io.execute {
             try {
                 p.setDataSource(app, item.uri)
                 p.prepareAsync()
             } catch (x: Exception) {
-                main.post { if (myLoad == load) { Log.w("LiteDash", "MediaPlayer: ${x.message}"); fail(app.getString(R.string.player_cannot_play)) } }
+                main.post { if (myLoad == load) { Log.w("LiteDash", "MediaPlayer: ${x.message}"); fail(cannotPlay(item)) } }
             }
         }
     }
 
     /** No se pudo: se suelta el audio (play lo vuelve a intentar) y se avisa. */
+    /** Lo que se dice cuando no suena: una canción de la memoria no se abrió; una estación, quizá la red. */
+    private fun cannotPlay(item: Playable) =
+        app.getString(if (item is Track) R.string.player_cannot_open_track else R.string.player_cannot_play)
+
     private fun fail(message: String) {
         load++
         releaseAudio()
-        state = PlayerState(state.source, state.queue, state.index, playing = false, buffering = false, error = message)
+        state = state.copy(playing = false, buffering = false, error = message)
         publishState()
         PlaybackService.update(app)
     }
 
     private fun update(playing: Boolean = state.playing, buffering: Boolean = state.buffering) {
-        state = PlayerState(state.source, state.queue, state.index, playing, buffering, null)
+        state = state.copy(playing = playing, buffering = buffering, error = null)
         publishState()
         PlaybackService.update(app)
     }
@@ -277,6 +367,12 @@ object Player {
     private fun ensureSession() {
         if (session != null) return
         session = MediaSession(app, "LiteDash").apply {
+            // Android 6–7.1 solo manda las teclas de medios (volante, botones) a las sesiones que lo piden; desde la 8
+            // todas las reciben y la bandera ya no existe.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                @Suppress("DEPRECATION")
+                setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS)
+            }
             setCallback(object : MediaSession.Callback() {
                 override fun onPlay() = resume()
                 override fun onPause() = pause()
@@ -285,8 +381,7 @@ object Player {
                 override fun onSeekTo(pos: Long) = seekTo(pos)
                 override fun onStop() = stop()
             })
-            val open = app.packageManager.getLaunchIntentForPackage(app.packageName)
-            if (open != null) setSessionActivity(PendingIntent.getActivity(app, 0, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            openLiteDash(app)?.let(::setSessionActivity)
             isActive = true
         }
         onSession?.invoke()
@@ -298,11 +393,20 @@ object Player {
     /** Se creó la sesión (empezó a sonar algo): la pieza Música la toma. */
     var onSession: (() -> Unit)? = null
 
+    /** Se pidió que suene (play o reanudar) [PlayerSource]: con la USB, la música calla la radio de fábrica. */
+    var onPlay: ((PlayerSource) -> Unit)? = null
+
     /** La duración que dio el reproductor al preparar (−1 = aún no o no se sabe). */
     private var preparedDuration = -1L
 
     /** Lo último publicado, para volverlo a publicar con la duración. */
     private var shown: Triple<Playable, Bitmap?, Tags?>? = null
+
+    /** Título, artista y carátula de lo que suena como los ve la sesión (con sus etiquetas), para el aviso; null = nada. */
+    internal fun nowShown(): Triple<String, String, Bitmap?>? {
+        val (item, art, tags) = shown?.takeIf { it.first.key == state.current?.key } ?: return null
+        return Triple(tags?.title ?: item.title, tags?.artist ?: item.subtitle, art)
+    }
 
     private fun publishMetadata(item: Playable, art: Bitmap?, tags: Tags? = null) {
         shown = Triple(item, art, tags)
@@ -357,7 +461,7 @@ object Player {
         }
     }.getOrNull()?.takeIf { it.title != null || it.artist != null }
 
-    /** Carátula del archivo (etiqueta incrustada) o el logo de la estación, reducida a [ART_SIDE]. */
+    /** Carátula del archivo (etiqueta incrustada) o el logo de la estación, reducida a [ART_SIDE]. Solo en [art]. */
     private fun artworkOf(item: Playable): Bitmap? = runCatching {
         if (item.key in noArt) return null
         val bytes = when (item) {
@@ -382,7 +486,7 @@ object Player {
                 pause()
                 resumeAfterFocus = wasPlaying
             }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> { player?.setVolume(0.2f, 0.2f); aac?.setVolume(0.2f); ducked = true }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> { player?.setVolume(DUCK_VOLUME, DUCK_VOLUME); aac?.setVolume(DUCK_VOLUME); ducked = true }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 if (ducked) { player?.setVolume(1f, 1f); aac?.setVolume(1f); ducked = false }
                 if (resumeAfterFocus) { resumeAfterFocus = false; resume() }
@@ -402,7 +506,23 @@ object Player {
             @Suppress("DEPRECATION")
             audio.requestAudioFocus(focusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
         }
-        return granted == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        return (granted == AudioManager.AUDIOFOCUS_REQUEST_GRANTED).also { focusGranted = it }
+    }
+
+    /** Lo que contestó Android la última vez que se pidió el foco; null = aún no se pide. */
+    @Volatile private var focusGranted: Boolean? = null
+
+    /** Para los reportes: qué hace el reproductor, su error y si tiene el foco. */
+    fun describe(): String {
+        val s = state
+        val doing = when {
+            s.buffering -> "carga"
+            s.playing -> "suena"
+            s.current != null -> "en pausa"
+            else -> "nada"
+        }
+        val focus = focusGranted?.let { if (it) "sí" else "no" } ?: "-"
+        return "reproductor=$doing${s.source?.let { " (${it.name.lowercase()})" }.orEmpty()} error=${s.error ?: "-"} foco=$focus"
     }
 
     private fun abandonFocus() {
@@ -411,14 +531,17 @@ object Player {
         else @Suppress("DEPRECATION") audio.abandonAudioFocus(focusListener)
     }
 
-    // --- Si sacan la memoria USB mientras suena, se para (sin ella no hay archivos). ---
+    // --- Si sacan la memoria de la canción mientras suena, se para (sin ella no hay archivo). ---
 
     private fun watchUsb() {
         if (usbWatcher != null) return
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) {
                 Drives.changed()
-                if (i.action != Intent.ACTION_MEDIA_MOUNTED && state.current is Track) stop()
+                if (i.action == Intent.ACTION_MEDIA_MOUNTED) return
+                // Otra memoria o la SD que no es la de la canción: sigue sonando.
+                val track = state.current as? Track ?: return
+                if (track.onVolume(i.data?.path)) stop()
             }
         }
         ContextCompat.registerReceiver(app, receiver, Drives.mediaFilter(), ContextCompat.RECEIVER_EXPORTED)

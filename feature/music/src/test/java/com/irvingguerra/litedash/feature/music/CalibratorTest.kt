@@ -60,9 +60,33 @@ class CalibratorTest {
         }
         assertEquals(Step.Ask, c.signal(heard = false))
         assertEquals(Step.Failed, c.answer(yes = false))
-        assertEquals(Recipes.FAILED, store.saved?.id)
-        // Ya no se prueba nada.
+        assertEquals(SavedRecipe(Recipes.FAILED, SavedBy.USER), store.saved)
+        // Ya no se prueba nada, tampoco en otro arranque.
         assertEquals(Step.Done, c.play(topWay, null))
+        assertEquals(Step.Done, calibrator().play(topWay, null))
+    }
+
+    @Test
+    fun unansweredFailureIsNotTheUsersAndIsRetriedOnce() {
+        // La señal rechaza las primeras, nadie contesta la pregunta de la última y luego esa ya no se puede (su app no
+        // abre): no queda nada, pero no fue un "No" de la persona (reporte E3F104).
+        val all = listOf(Recipes.TW_SOURCE8, Recipes.PLAIN, Recipes.OPEN_FACTORY)
+        val twoRecipes = listOf(Recipes.TW_SOURCE8, Recipes.PLAIN)
+        val c = calibrator(trusts = true)
+        c.play(all, null)
+        assertEquals(Step.Apply(Recipes.PLAIN), c.signal(heard = false))
+        assertEquals(Step.Apply(Recipes.OPEN_FACTORY), c.signal(heard = false))
+        assertEquals(Step.Ask, c.signal(heard = false))
+        c.abort()
+        assertEquals(Step.Failed, c.play(twoRecipes, null))
+        assertEquals(SavedRecipe(Recipes.FAILED, SavedBy.SIGNAL), store.saved)
+        // En este arranque ya no se insiste.
+        assertEquals(Step.Done, c.play(twoRecipes, null))
+        // En el siguiente, una vez más desde el principio; si ahora suena, se guarda.
+        val next = calibrator(trusts = true)
+        assertEquals(Step.Apply(Recipes.TW_SOURCE8), next.play(twoRecipes, null))
+        assertEquals(Step.Done, next.signal(heard = true))
+        assertEquals(SavedRecipe(Recipes.TW_SOURCE8, SavedBy.SIGNAL), store.saved)
     }
 
     @Test
@@ -224,5 +248,51 @@ class CalibratorTest {
         c.reset()
         assertNull(store.saved)
         assertEquals(Step.Apply(Recipes.PLAIN), c.play(topWay, null))
+    }
+
+    // —— Sin forma de saber si suena (TopWay com.tw.bt sin AVRCP ni Connect, reporte E48170) ——
+
+    @Test
+    fun brandRecipeStaysWhenNothingCanTellIfItSounds() {
+        val c = calibrator(trusts = true)
+        val brandFirst = listOf(Recipes.TW_SOURCE8, Recipes.PLAIN, Recipes.OPEN_FACTORY)
+        assertEquals(Step.Apply(Recipes.TW_SOURCE8), c.play(brandFirst, null))
+        // Antes: abortar y empezar de cero en cada play (8 veces en un minuto). Ahora se queda puesta sin preguntar ni guardar.
+        assertEquals(Step.Done, c.unknown())
+        assertFalse(c.pending)
+        assertNull(store.saved)
+        // El siguiente play la vuelve a dar (quien la aplica no la reescribe si sigue puesta) y no pasa a la siguiente.
+        assertEquals(Step.Apply(Recipes.TW_SOURCE8), c.play(brandFirst, null))
+        assertEquals(Step.Done, c.unknown())
+    }
+
+    @Test
+    fun trustedFamilyNeverAsksWhenNothingCanTell() {
+        // TopWay/FYT (dec. 31c): sin audio en Android no se pregunta, ni con una receta que no es de la marca.
+        val c = calibrator(trusts = true)
+        assertEquals(Step.Apply(Recipes.PLAIN), c.play(topWay, null))
+        assertEquals(Step.Done, c.unknown())
+        assertFalse(c.asking)
+        assertNull(store.saved)
+    }
+
+    @Test
+    fun otherFamiliesAskWhenNothingCanTellIfItSounds() {
+        val c = calibrator(trusts = false)
+        assertEquals(Step.Apply(Recipes.PLAIN), c.play(topWay, null))
+        assertEquals(Step.Ask, c.unknown())
+        assertTrue(c.asking)
+        assertEquals(Step.Done, c.answer(yes = true))
+        assertEquals(SavedRecipe(Recipes.PLAIN, SavedBy.USER), store.saved)
+    }
+
+    @Test
+    fun savedRecipeIsKeptWithoutAFailWhenNothingCanTell() {
+        store.saved = SavedRecipe(Recipes.TW_SOURCE8, SavedBy.SIGNAL)
+        val c = calibrator()
+        assertEquals(Step.Apply(Recipes.TW_SOURCE8), c.play(topWay, null))
+        assertEquals(Step.Done, c.unknown())
+        assertEquals(SavedRecipe(Recipes.TW_SOURCE8, SavedBy.SIGNAL), store.saved)
+        assertFalse(c.pending)
     }
 }

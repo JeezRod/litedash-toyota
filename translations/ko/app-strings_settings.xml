@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="weather_switch">날씨</string>
+    <string name="reminder_pick_date">%1$s 기한은 언제인가요?</string>
+    <string name="tab_home">홈</string>
+    <string name="tab_interface">인터페이스</string>
+    <string name="accent_title">인터페이스 색상</string>
+    <string name="accent_help">스위치, 버튼, 재생, 진행 바에 적용돼요. 카드와 배경은 그대로예요.</string>
+    <string name="cards_title">카드</string>
+    <string name="cards_help">앱 전체 카드의 모습: 색상과 배경이 비쳐 보이는지 정해요.</string>
+    <string name="cards_solid">불투명</string>
+    <string name="cards_glass">유리</string>
+    <string name="cards_opacity">보이는 정도</string>
+    <string name="cards_glass_help">배경화면이 각 카드 뒤에 흐리게 보여요. 지도 배경 위에서는 지도가 은은하게 보여요.</string>
+    <string name="cards_themes">조합</string>
+    <string name="language_search">언어 찾기</string>
+    <string name="language_not_found">그 언어는 아직 없어요. litedash.dev/translate 에서 번역을 도와주세요.</string>
+    <string name="factory_look">기본값</string>
+    <string name="tab_language_units">언어 &amp; 단위</string>
+    <string name="tab_theme_brightness">테마 &amp; 밝기</string>
+    <plurals name="language_show_all">
+        <item quantity="other">모든 언어 보기 (%d)</item>
+    </plurals>
+    <string name="language_show_less">간단히 보기</string>
+</resources>

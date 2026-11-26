@@ -1,14 +1,17 @@
 package com.irvingguerra.litedash
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.annotation.RequiresApi
 import androidx.activity.compose.setContent
@@ -17,6 +20,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
@@ -66,7 +70,11 @@ object SplitScreen {
     private fun isMapOrMusic(context: Context, d: Dependencies, pkg: String): Boolean {
         if (pkg in NAVIGATION_PACKAGES || pkg in MUSIC_PACKAGES || pkg == d.music.preferred) return true
         if (d.prefs.mapApp?.substringBefore('/') == pkg) return true
-        val category = runCatching { context.packageManager.getApplicationInfo(pkg, 0).category }.getOrNull()
+        val category = try {
+            context.packageManager.getApplicationInfo(pkg, 0).category
+        } catch (_: PackageManager.NameNotFoundException) {
+            return false
+        }
         return category == ApplicationInfo.CATEGORY_MAPS || category == ApplicationInfo.CATEGORY_AUDIO
     }
 
@@ -96,8 +104,22 @@ object SplitScreen {
             .putExtra(EXTRA_OPEN, true)
             .putExtra(EXTRA_LEFT, carLeft)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { context.startActivity(intent) }
+        launch(context, intent)
     }
+
+    /** Abre [intent]; si Android no deja, queda anotado en el registro y regresa false. */
+    private fun launch(context: Context, intent: Intent): Boolean = try {
+        context.startActivity(intent)
+        true
+    } catch (e: ActivityNotFoundException) {
+        Log.w(TAG, "no se pudo abrir ${intent.component ?: intent.`package`}", e)
+        false
+    } catch (e: SecurityException) {
+        Log.w(TAG, "Android no dejó abrir ${intent.component ?: intent.`package`}", e)
+        false
+    }
+
+    private const val TAG = "SplitScreen"
 
     internal fun appOf(intent: Intent): Intent? = IntentCompat.getParcelableExtra(intent, EXTRA_APP, Intent::class.java)
 
@@ -116,12 +138,13 @@ object SplitScreen {
         val view = activity.window.decorView
         val since = SystemClock.elapsedRealtime()
         fun tryOpen() {
-            if (activity.isFinishing) return
+            // Una ventana que ya se cerró o se recreó (p. ej. al cambiar el idioma) ya no abre nada.
+            if (activity.isFinishing || activity.isDestroyed) return
             if (!activity.onSide(left) && SystemClock.elapsedRealtime() - since < GIVE_UP_MS) {
                 view.postDelayed(::tryOpen, CHECK_MS)
                 return
             }
-            runCatching { activity.startActivity(Intent(app).addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            launch(activity, Intent(app).addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_NEW_TASK))
         }
         view.post(::tryOpen)
     }
@@ -135,7 +158,7 @@ object SplitScreen {
             .putExtra(EXTRA_OPEN, true)
             .putExtra(EXTRA_LEFT, intent.getBooleanExtra(EXTRA_LEFT, false))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
-        runCatching { activity.startActivity(board) }
+        launch(activity, board)
     }
 
     /**
@@ -147,12 +170,13 @@ object SplitScreen {
     internal fun swap(activity: SplitActivity, app: Intent?) {
         app ?: return
         val prefs = (activity.application as LiteDashApp).dependencies.prefs
-        prefs.splitCarLeft = !prefs.splitCarLeft
+        val left = !prefs.splitCarLeft
         val step = Intent(activity, SplitStartActivity::class.java)
             .putExtra(EXTRA_APP, app)
-            .putExtra(EXTRA_LEFT, prefs.splitCarLeft)
+            .putExtra(EXTRA_LEFT, left)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
-        runCatching { activity.startActivity(step) }
+        // El lado guardado cambia solo si de verdad se movió (si no, quedaría al revés de lo que se ve).
+        if (launch(activity, step)) prefs.splitCarLeft = left
     }
 }
 
@@ -161,11 +185,18 @@ object SplitScreen {
 private fun ComponentActivity.onSide(left: Boolean): Boolean {
     val at = IntArray(2)
     window.decorView.getLocationOnScreen(at)
-    val screen = resources.displayMetrics.widthPixels.coerceAtLeast(1)
-    val onLeft = at[0] < screen / 4
+    return onSide(left, at[0], window.decorView.width, resources.displayMetrics.widthPixels, isInMultiWindowMode)
+}
+
+/**
+ * Una ventana que empieza en [x] y mide [width] de una pantalla de [screen], ¿está del lado [left]? A la izquierda
+ * cuenta completa (recién abierta desde el inicio) o ya en la mitad izquierda; a la derecha, la que empieza pasado el cuarto.
+ */
+internal fun onSide(left: Boolean, x: Int, width: Int, screen: Int, multiWindow: Boolean): Boolean {
+    val total = screen.coerceAtLeast(1)
+    val onLeft = x < total / 4
     if (!left) return !onLeft
-    // A la izquierda: completa (recién abierto desde el inicio) o ya en la mitad izquierda.
-    return onLeft && (!isInMultiWindowMode || window.decorView.width < screen * 3 / 4)
+    return onLeft && (!multiWindow || width < total * 3 / 4)
 }
 
 /** El auto solo, para la mitad de la pantalla dividida, con cambiar de lado y salir. */
@@ -197,6 +228,12 @@ class SplitActivity : ComponentActivity() {
     private fun openAppIfNeeded() = SplitScreen.openBeside(this, intent)
 
     override fun attachBaseContext(base: Context) = super.attachBaseContext(contextWithLanguage(base))
+
+    // Con un idioma bajado, sus recursos no los pone al día Android ([TranslatedResources.sync]).
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        syncTranslated(resources, newConfig)
+        super.onConfigurationChanged(newConfig)
+    }
 }
 
 /**
@@ -225,20 +262,10 @@ private fun SplitBoard(d: Dependencies, onSwap: () -> Unit, onExit: () -> Unit) 
     }
 }
 
-/** Ajustes → Apps → Pantalla dividida. */
+/** Ajustes → Apps → Pantalla dividida (la pestaña solo sale donde [SplitScreen.supported]). */
 @Composable
 fun SplitSettings(d: Dependencies) {
     val c = LocalColors.current
-    val supported = remember { SplitScreen.supported() }
-    // Sin pantalla dividida en este Android: solo se dice por qué no está disponible.
-    if (!supported) {
-        Label(stringResource(R.string.split_title), Typography.subtitle)
-        // Dos razones distintas: Android viejo, o un Android nuevo cuya pantalla no deja dividir.
-        val reason = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S_V2) stringResource(R.string.split_unsupported, Build.VERSION.RELEASE)
-        else stringResource(R.string.split_unsupported_screen)
-        Label(reason, Typography.small, c.textMuted)
-        return
-    }
     SwitchRow(stringResource(R.string.split_title), d.prefs.splitScreen, { d.prefs.splitScreen = it }, stringResource(R.string.split_help))
     if (d.prefs.splitScreen) {
         Label(stringResource(R.string.split_view), Typography.label, c.textMuted)
@@ -246,12 +273,16 @@ fun SplitSettings(d: Dependencies) {
             listOf(false to stringResource(R.string.tile_car), true to stringResource(R.string.tile_road)),
             d.prefs.splitRoad,
             { d.prefs.splitRoad = it },
+            Modifier.fillMaxWidth(),
+            check = true,
         )
         Label(stringResource(R.string.split_side), Typography.label, c.textMuted)
         Segmented(
             listOf(true to stringResource(R.string.split_left), false to stringResource(R.string.split_right)),
             d.prefs.splitCarLeft,
             { d.prefs.splitCarLeft = it },
+            Modifier.fillMaxWidth(),
+            check = true,
         )
         Label(stringResource(R.string.split_swap_help), Typography.small, c.textMuted)
     }

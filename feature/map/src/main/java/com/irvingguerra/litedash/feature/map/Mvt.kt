@@ -2,8 +2,8 @@ package com.irvingguerra.litedash.feature.map
 
 /**
  * Lo poco que el mapa minimalista necesita de una tesela vectorial (formato Mapbox Vector Tile,
- * esquema OpenMapTiles): agua, parques y edificios (áreas), ríos (líneas), calles por tipo y sus
- * nombres. Todo lo demás (negocios, números de casa…) se salta sin leerlo. Coordenadas en unidades de [extent].
+ * esquema OpenMapTiles): agua y parques (áreas), ríos (líneas), calles por tipo y sus
+ * nombres. Todo lo demás (edificios, negocios, números de casa…) se salta sin leerlo. Coordenadas en unidades de [extent].
  */
 class VectorTile(
     val extent: Int,
@@ -12,8 +12,9 @@ class VectorTile(
     val rivers: List<Shape>,
     /** Por [RoadTier.ordinal]. */
     val roads: List<List<Shape>>,
-    val buildings: List<Shape> = emptyList(),
-    val names: List<RoadName> = emptyList(),
+    val names: List<RoadName>,
+    /** De un solo sentido, por [RoadTier.ordinal] y en el orden de [roads] (las de doble sentido llevan raya amarilla). */
+    val oneway: List<BooleanArray> = roads.map { BooleanArray(it.size) },
 )
 
 /** Una calle con nombre (capa `transportation_name`): su trazo y su tipo. */
@@ -56,17 +57,17 @@ fun roadTier(osmClass: String?): RoadTier? = when (osmClass) {
  * Lee lo que se usa de [data] (ya sin gzip). Una tesela dañada da lo que se alcanzó a leer; null si
  * traía algo pero ni una capa (no es una tesela: p. ej. la página de un portal cautivo). Vacía = no hay nada ahí.
  */
-fun parseVectorTile(data: ByteArray, withBuildings: Boolean = true): VectorTile? {
+fun parseVectorTile(data: ByteArray): VectorTile? {
     val water = ArrayList<Shape>()
     val parks = ArrayList<Shape>()
     val rivers = ArrayList<Shape>()
     val roads = List(RoadTier.entries.size) { ArrayList<Shape>() }
-    val buildings = ArrayList<Shape>()
+    val oneway = List(RoadTier.entries.size) { ArrayList<Boolean>() }
     val names = ArrayList<RoadName>()
     var extent = 4096
     var layers = 0
     val tile = Pbf(data)
-    runCatching {
+    try {
         while (tile.more()) {
             val tag = tile.tag()
             if (tag != LAYER) {
@@ -88,11 +89,20 @@ fun parseVectorTile(data: ByteArray, withBuildings: Boolean = true): VectorTile?
                     }
                 }
                 "waterway" -> layer.features.forEach { f -> if (f.type == LINE && f.value(layer, classKey) in RIVERS) rivers += f.shape() }
-                "transportation" -> layer.features.forEach { f ->
-                    if (f.type != LINE) return@forEach
-                    roadTier(f.value(layer, classKey))?.let { roads[it.ordinal] += f.shape() }
+                "transportation" -> {
+                    val onewayKey = layer.keys.indexOf("oneway")
+                    layer.features.forEach { f ->
+                        if (f.type != LINE) return@forEach
+                        roadTier(f.value(layer, classKey))?.let {
+                            // Primero todo lo que se lee (una tesela cortada truena aquí): la forma y su sentido van juntos.
+                            // OpenMapTiles: 1 o -1 = un solo sentido; 0 o sin dato = doble.
+                            val single = f.value(layer, onewayKey).let { v -> v != null && v != "0" }
+                            val shape = f.shape()
+                            roads[it.ordinal] += shape
+                            oneway[it.ordinal] += single
+                        }
+                    }
                 }
-                "building" -> if (withBuildings) layer.features.forEach { f -> if (f.type == POLYGON) buildings += f.shape() }
                 "transportation_name" -> {
                     val nameKey = layer.keys.indexOf("name")
                     layer.features.forEach { f ->
@@ -104,12 +114,16 @@ fun parseVectorTile(data: ByteArray, withBuildings: Boolean = true): VectorTile?
                 }
             }
         }
+    } catch (_: RuntimeException) {
+        // Dañada o cortada (fuera de rango al leerla): lo que se alcanzó a leer.
     }
     if (layers == 0 && data.isNotEmpty()) return null
-    return VectorTile(extent, water, parks, rivers, roads, buildings, names)
+    return VectorTile(
+        extent, water, parks, rivers, roads, names, oneway.map { it.toBooleanArray() },
+    )
 }
 
-private val USED_LAYERS = setOf("water", "landcover", "waterway", "transportation", "building", "transportation_name")
+private val USED_LAYERS = setOf("water", "landcover", "waterway", "transportation", "transportation_name")
 private val RIVERS = setOf("river", "canal")
 
 private class Layer(val name: String, val extent: Int, val keys: List<String>, val values: List<String?>, val features: List<Feature>)
@@ -153,6 +167,7 @@ private class Feature(val type: Int, val tags: Pbf?, val geometry: Pbf?) {
     }
 }
 
+/** La capa de [p]; null si no se usa: se deja sin leer sus elementos. */
 private fun readLayer(p: Pbf): Layer? {
     var name = ""
     var extent = 4096
@@ -168,7 +183,7 @@ private fun readLayer(p: Pbf): Layer? {
             EXTENT -> extent = p.varint().toInt()
             else -> p.skip(tag)
         }
-        // Las capas que no se usan no se leen (negocios, números de casa, límites…).
+        // Las capas que no se usan no se leen (edificios, negocios, números de casa, límites…).
         if (name.isNotEmpty() && name !in USED_LAYERS) return null
     }
     return Layer(name, extent, keys, values, features.map(::readFeature))
@@ -189,12 +204,17 @@ private fun readFeature(p: Pbf): Feature {
     return Feature(type, tags, geometry)
 }
 
-/** Solo los valores de texto (los números de las etiquetas no se usan). */
+/** El valor de una etiqueta como texto: los números (el sentido) también, escritos en decimal. */
 private fun readValue(p: Pbf): String? {
     while (p.more()) {
-        val tag = p.tag()
-        if (tag == STRING_VALUE) return p.string()
-        p.skip(tag)
+        when (val tag = p.tag()) {
+            STRING_VALUE -> return p.string()
+            FLOAT_VALUE -> return java.lang.Float.intBitsToFloat(p.fixed32()).toString()
+            DOUBLE_VALUE -> return java.lang.Double.longBitsToDouble(p.fixed64()).toString()
+            INT_VALUE, UINT_VALUE, BOOL_VALUE -> return p.varint().toString()
+            SINT_VALUE -> return zigzag(p.varint()).toString()
+            else -> p.skip(tag)
+        }
     }
     return null
 }
@@ -218,6 +238,18 @@ internal class Pbf(private val b: ByteArray, private var pos: Int = 0, private v
     }
 
     fun tag(): Int = varint().toInt()
+
+    fun fixed32(): Int {
+        var v = 0
+        for (i in 0 until 4) v = v or ((b[pos++].toInt() and 0xFF) shl (8 * i))
+        return v
+    }
+
+    fun fixed64(): Long {
+        var v = 0L
+        for (i in 0 until 8) v = v or ((b[pos++].toLong() and 0xFF) shl (8 * i))
+        return v
+    }
 
     fun message(): Pbf {
         val length = varint().toInt()
@@ -251,6 +283,12 @@ private const val TAGS = 2 shl 3 or 2
 private const val TYPE = 3 shl 3 or 0
 private const val GEOMETRY = 4 shl 3 or 2
 private const val STRING_VALUE = 1 shl 3 or 2
+private const val FLOAT_VALUE = 2 shl 3 or 5
+private const val DOUBLE_VALUE = 3 shl 3 or 1
+private const val INT_VALUE = 4 shl 3 or 0
+private const val UINT_VALUE = 5 shl 3 or 0
+private const val SINT_VALUE = 6 shl 3 or 0
+private const val BOOL_VALUE = 7 shl 3 or 0
 
 private const val LINE = 2
 private const val POLYGON = 3

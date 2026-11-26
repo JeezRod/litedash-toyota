@@ -38,8 +38,8 @@ import com.irvingguerra.litedash.feature.dashboard.TileTypes
 
 /**
  * Las opciones de un widget en su [Tile.data]: "clave=off" apaga una que de fábrica está prendida (lo de
- * fábrica no se escribe: los acomodos de antes se ven igual). Los widgets que abren una app (App, Teléfono,
- * Android Auto) llevan además la app al principio, sin "=".
+ * fábrica no se escribe: los acomodos de antes se ven igual). El widget App lleva además la app al principio, sin "="
+ * (Teléfono y Android Auto / CarPlay la llevaban hasta la 1.5.15: [Preferences.adoptWidgetApps] la adopta).
  */
 object WidgetFlags {
     const val WEATHER = "weather"
@@ -75,7 +75,7 @@ fun clockWeather(d: Dependencies, data: String): WeatherRepository? =
 /** Los tipos que se personalizan aquí (los demás tienen su propio panel: medidores, mapa, imagen, auto). */
 val WIDGET_OPTIONS = setOf(
     TileTypes.CLOCK, TileTypes.WEATHER, TileTypes.TRIP, TileTypes.TIRES, TileTypes.WORKSHOP, TileTypes.MUSIC,
-    TileTypes.RADIO, TileTypes.APP, TileTypes.PHONE, TileTypes.PROJECTION,
+    TileTypes.RADIO, TileTypes.APP, TileTypes.PHONE,
 )
 
 /**
@@ -93,14 +93,14 @@ fun CustomizeWidgetPanel(
     onPickApp: () -> Unit,
     preview: @Composable (Tile) -> Unit,
 ) {
-    val tile = d.dashboard.tiles.firstOrNull { it.id == tileId }
+    val tile = d.dashboard.tile(tileId)
     if (tile == null) {
         // Cerrar escribe estado: fuera de la composición.
         LaunchedEffect(Unit) { close() }
         return
     }
-    val name = stringResource(TileSpecs.first { it.type == tile.type }.name).lowercase(currentLocale())
-    PanelScaffold(stringResource(R.string.widget_customize, name), close) {
+    // El nombre tal cual (sin pasarlo a minúsculas: en otros idiomas los sustantivos llevan mayúscula).
+    PanelScaffold(stringResource(R.string.widget_customize, stringResource(TileSpecs.first { it.type == tile.type }.name)), close) {
         WidgetPanelLayout(
             preview = { m -> WidgetPreview(tile, cell, m) { preview(tile) } },
             options = { m -> Column(m.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) { WidgetOptionRows(d, tile, apps, onPickApp) } },
@@ -108,9 +108,9 @@ fun CustomizeWidgetPanel(
     }
 }
 
-/** Vista previa y opciones: lado a lado en pantallas acostadas; paradas, una sobre otra. */
+/** Vista previa y opciones de un widget (también el panel del Mapa): lado a lado acostada; parada, una sobre otra. */
 @Composable
-private fun ColumnScope.WidgetPanelLayout(preview: @Composable (Modifier) -> Unit, options: @Composable (Modifier) -> Unit) {
+internal fun ColumnScope.WidgetPanelLayout(preview: @Composable (Modifier) -> Unit, options: @Composable (Modifier) -> Unit) {
     BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
         if (maxWidth > maxHeight) Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             preview(Modifier.weight(1f).fillMaxHeight().padding(bottom = 16.dp))
@@ -127,7 +127,7 @@ private fun ColumnScope.WidgetPanelLayout(preview: @Composable (Modifier) -> Uni
  * según lo que mide). Si no cabe, se achica entero. Los toques no llegan a él.
  */
 @Composable
-private fun WidgetPreview(tile: Tile, cell: DpSize, modifier: Modifier, content: @Composable () -> Unit) {
+internal fun WidgetPreview(tile: Tile, cell: DpSize, modifier: Modifier, content: @Composable () -> Unit) {
     BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
         val width = cell.width * tile.width
         val height = cell.height * tile.height
@@ -165,12 +165,14 @@ private fun FlagRow(d: Dependencies, tile: Tile, key: String, title: Int) {
 @Composable
 private fun WidgetOptionRows(d: Dependencies, tile: Tile, apps: List<App>, onPickApp: () -> Unit) {
     val c = LocalColors.current
-    val data = tile.data
     when (tile.type) {
         TileTypes.CLOCK -> {
-            FlagRow(d, tile, WidgetFlags.WEATHER, R.string.clock_show_weather)
-            // Con el widget Clima en el inicio, el reloj no lo repite aunque esté prendido.
-            if (d.dashboard.shown.any { it.type == TileTypes.WEATHER }) Label(stringResource(R.string.clock_weather_in_widget), Typography.small, c.textMuted)
+            // Sin el módulo Clima no hay nada que mostrar: el renglón no sale.
+            if (d.weather.enabled) {
+                FlagRow(d, tile, WidgetFlags.WEATHER, R.string.clock_show_weather)
+                // Con el widget Clima en el inicio, el reloj no lo repite aunque esté prendido.
+                if (d.dashboard.shown.any { it.type == TileTypes.WEATHER }) Label(stringResource(R.string.clock_weather_in_widget), Typography.small, c.textMuted)
+            }
             FlagRow(d, tile, WidgetFlags.DATE, R.string.option_date)
             if (d.prefs.driverName != null) FlagRow(d, tile, WidgetFlags.GREETING, R.string.option_greeting)
         }
@@ -184,6 +186,8 @@ private fun WidgetOptionRows(d: Dependencies, tile: Tile, apps: List<App>, onPic
             FlagRow(d, tile, WidgetFlags.TIME, R.string.trip_time)
             FlagRow(d, tile, WidgetFlags.AVERAGE, R.string.trip_average)
             FlagRow(d, tile, WidgetFlags.HEADING, R.string.trip_heading)
+            PreciseLocationNote(d.trip)
+            ResetTripButton(d.trip)
         }
         TileTypes.TIRES, TileTypes.WORKSHOP -> FlagRow(d, tile, WidgetFlags.CAR, R.string.option_car)
         TileTypes.MUSIC, TileTypes.RADIO -> {
@@ -194,15 +198,17 @@ private fun WidgetOptionRows(d: Dependencies, tile: Tile, apps: List<App>, onPic
             FlagRow(d, tile, WidgetFlags.NAME, R.string.option_app_name)
             Button(stringResource(R.string.option_change_app), onPickApp)
         }
-        TileTypes.PHONE, TileTypes.PROJECTION -> {
-            val chosen = appKeyOf(data)?.let { d.apps.find(apps, it) }
-            val default = stringResource(if (tile.type == TileTypes.PHONE) R.string.option_opens_dialer else R.string.option_opens_auto)
+        TileTypes.PHONE -> {
+            // Una sola app de llamadas para toda la app ([Preferences.phoneApp]): el widget, la barra y el volante.
+            val chosen = phoneChoice(d, apps)
+            val default = stringResource(R.string.option_opens_dialer)
             Label(stringResource(R.string.option_opens), Typography.label, c.textMuted)
             Label(chosen?.name ?: default, Typography.subtitle)
+            Label(stringResource(R.string.option_phone_everywhere), Typography.small, c.textMuted)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(stringResource(R.string.option_change_app), onPickApp)
                 // También si la elegida ya no está instalada (sigue guardada y volvería al reinstalarla).
-                if (appKeyOf(data) != null) Button(default, { d.dashboard.setData(tile.id, withAppKey(data, null)) })
+                if (d.prefs.phoneApp != null) Button(default, { d.prefs.phoneApp = null })
             }
         }
     }

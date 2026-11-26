@@ -43,7 +43,7 @@ import com.irvingguerra.litedash.core.ui.LocalColors
 import com.irvingguerra.litedash.feature.car.CarColors
 
 /** Arcoíris del círculo "otro color" y de la barra de tono. */
-private val RAINBOW = listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)
+internal val RAINBOW = listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)
 
 /**
  * Los colores rápidos ([swatches]) y uno libre: el círculo de arcoíris abre un selector de
@@ -57,10 +57,12 @@ fun ColorPicker(
     onPreview: (Color) -> Unit,
     swatches: List<Color> = CarColors,
     leading: @Composable () -> Unit = {},
+    /** El cuadro de colores empieza cerrado aunque el color sea uno libre: se abre al tocar su círculo. */
+    startClosed: Boolean = false,
     onChange: (Color) -> Unit,
 ) {
     val custom = color.isSpecified && swatches.none { it.toArgb() == color.toArgb() }
-    var open by remember { mutableStateOf(custom) }
+    var open by remember { mutableStateOf(custom && !startClosed) }
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             leading()
@@ -76,6 +78,7 @@ fun ColorPicker(
     }
 }
 
+/** Un círculo de color para elegir (el color del auto, de la interfaz o de un medidor): el elegido con aro del acento. */
 @Composable
 internal fun Swatch(selected: Boolean, fill: Brush, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val c = LocalColors.current
@@ -84,10 +87,10 @@ internal fun Swatch(selected: Boolean, fill: Brush, modifier: Modifier = Modifie
             .size(56.dp)
             .clip(CircleShape)
             .border(3.dp, if (selected) c.accent else c.line, CircleShape)
+            .clickable(onClick = onClick)
             .padding(6.dp)
             .clip(CircleShape)
-            .background(fill)
-            .clickable(onClick = onClick),
+            .background(fill),
     )
 }
 

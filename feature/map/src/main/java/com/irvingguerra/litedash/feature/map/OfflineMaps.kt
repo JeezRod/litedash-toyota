@@ -6,20 +6,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.io.File
+import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.PI
-import kotlin.math.asin
-import kotlin.math.atan
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
-import kotlin.math.sin
-import kotlin.math.sinh
-import kotlin.math.sqrt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -38,7 +34,11 @@ import org.json.JSONObject
 
 /** Una zona descargada: un círculo de [km] alrededor de ([lat], [lon]) con sus [tiles] teselas ([bytes] en disco). */
 class OfflineArea(val id: String, val lat: Double, val lon: Double, val km: Int, val tiles: Int, val bytes: Long, val savedAt: Long) {
-    fun contains(lat: Double, lon: Double) = distanceKm(this.lat, this.lon, lat, lon) <= km
+    /**
+     * ¿([lat], [lon]) tiene bajada su tesela? La zona trae las teselas cuyo CENTRO cae a [km] o menos: en la orilla, la
+     * tesela de debajo puede no estar. Se cuenta adentro solo a media diagonal de tesela de la orilla.
+     */
+    fun contains(lat: Double, lon: Double) = distanceKm(this.lat, this.lon, lat, lon) <= km - areaTileKm(this.lat) * HALF_DIAGONAL
 }
 
 /**
@@ -47,14 +47,19 @@ class OfflineArea(val id: String, val lat: Double, val lon: Double, val km: Int,
  */
 class OfflineJob(val done: Int, val total: Int, val bytes: Long, val error: OfflineError? = null, val waiting: Boolean = false)
 
-/** BLOCKED = el servidor nos cortó (403/418); NETWORK = sin internet o falló varias veces seguidas. */
-enum class OfflineError { BLOCKED, NETWORK }
+/**
+ * BLOCKED = el servidor nos cortó (403/418); NETWORK = sin internet o falló varias veces seguidas; TOO_BIG = la descarga
+ * pasa del tope de OpenFreeMap ([OfflineMaps.MAX_TILES] / [OfflineMaps.MAX_BYTES]).
+ */
+enum class OfflineError { BLOCKED, NETWORK, TOO_BIG }
 
 /**
  * El mapa minimalista sin conexión: zonas que el usuario descarga completas (las teselas del 14 en un
  * círculo y las del 12 y 13 que las cubren, para lo lejano del mapa inclinado) en `filesDir/map_offline`,
  * tal como llegan (comprimidas). No caducan ni se recortan: solo se van al borrar su zona. OSM no
- * permite bajar en bloque; OpenFreeMap sí (sin límites), igual con calma: dos a la vez y nuestro User-Agent.
+ * permite bajar en bloque. OpenFreeMap sí, con sus reglas (openfreemap.org/tos, revisadas el 2026-11-16): cada
+ * descarga para usar sin conexión de máximo 3 000 teselas o 50 MB, a lo más 4 a la vez y con nuestro User-Agent.
+ * Aquí: dos a la vez, y una descarga que pasaría de [MAX_TILES] o [MAX_BYTES] no se hace (ni al volver a bajar).
  *
  * Todo el estado se cambia con [lock] y por [generation]: lo que haga una descarga ya cancelada o
  * reemplazada no toca el estado ni deja archivos. En disco solo se queda lo de alguna zona o de la
@@ -66,11 +71,18 @@ class OfflineMaps private constructor(private val app: Context) {
     private val lock = Any()
     private var running: Job? = null
     private var generation = 0
-    private var runningKeys: Set<Long> = emptySet()
-    private var areaKeys: Set<Long> = emptySet()
+    /** Se reemplazan enteras (nunca se cambian por dentro): [tile] las lee sin candado. */
+    @Volatile private var runningKeys: Set<Long> = emptySet()
+    @Volatile private var areaKeys: Set<Long> = emptySet()
     /** La lista se lee del disco una vez, fuera del hilo principal; lo que la cambia espera a que esté. */
+    /**
+     * ¿La lista en memoria es la de verdad? Si existe pero no se pudo leer (un apagón al guardarla) NO se barre nada en
+     * esta sesión: borraría las zonas del usuario. Sin lista (nunca guardó una zona) o con una vacía bien leída (borró
+     * todas) sí se barre: lo bajado de una zona cancelada a medias no es de nadie.
+     */
+    @Volatile private var trusted = false
     private val ready = scope.async {
-        readAreas()
+        trusted = readAreas()
         sweep(startup = true)
     }
 
@@ -79,20 +91,34 @@ class OfflineMaps private constructor(private val app: Context) {
     var job by mutableStateOf<OfflineJob?>(null)
         private set
 
-    /** Cuántas teselas lleva una zona (por [AVG_TILE_BYTES], su tamaño aproximado); de 200 km son decenas de miles: fuera del hilo principal. */
+    /** Cuántas teselas lleva una zona (por [AVG_TILE_BYTES], su tamaño aproximado); fuera del hilo principal. */
     suspend fun estimate(lat: Double, lon: Double, km: Int): Int = withContext(Dispatchers.Default) { areaTiles(lat, lon, km).size }
 
     /** ¿([lat], [lon]) está dentro de alguna zona descargada? */
     fun covers(lat: Double, lon: Double): Boolean = areas.any { it.contains(lat, lon) }
 
-    /** La tesela tal como se bajó (vacía = ahí no hay nada que dibujar); null = no está en ninguna zona. */
-    fun tile(z: Int, x: Int, y: Int): ByteArray? = File(dir, "${z}_${x}_${y}").takeIf { it.isFile }?.let { runCatching { it.readBytes() }.getOrNull() }
+    /**
+     * La tesela tal como se bajó (vacía = ahí no hay nada que dibujar); null = no está en ninguna zona. Sin zonas, o si
+     * no es de ninguna (ni de la descarga en curso), sale sin tocar el disco; mientras se lee la lista al arrancar, se busca.
+     */
+    fun tile(z: Int, x: Int, y: Int): ByteArray? {
+        val key = tileKey(z, x, y)
+        if (ready.isCompleted && key !in areaKeys && key !in runningKeys) return null
+        val file = File(dir, "${z}_${x}_${y}")
+        if (!file.exists()) return null
+        return try {
+            file.readBytes()
+        } catch (_: IOException) {
+            // Se borró con su zona en ese momento.
+            null
+        }
+    }
 
     /** Baja la zona de [km] alrededor de ([lat], [lon]); sigue aunque se cierre el panel. Lo ya bajado se salta. */
     fun download(lat: Double, lon: Double, km: Int, source: VectorTiles, userAgent: String) = synchronized(lock) {
         if (running?.isActive == true) return@synchronized
         val gen = ++generation
-        // Mientras se calculan las teselas (en IO: de 200 km son decenas de miles) ya se ve que empezó.
+        // Mientras se calculan las teselas (en IO) ya se ve que empezó.
         job = OfflineJob(0, 0, 0L)
         running = scope.launch {
             val keys = areaTiles(lat, lon, km)
@@ -123,14 +149,11 @@ class OfflineMaps private constructor(private val app: Context) {
     fun delete(id: String) {
         scope.launch {
             ready.await()
-            val candidates = synchronized(lock) {
-                val area = areas.firstOrNull { it.id == id } ?: return@launch
-                val rest = areas.filter { it.id != id }
-                writeAreas(rest)
-                replaceAreas(rest)
-                areaTiles(area.lat, area.lon, area.km) - areaKeys
-            }
-            removeTiles(candidates)
+            val area = synchronized(lock) { areas.firstOrNull { it.id == id } } ?: return@launch
+            // Fuera del candado: una zona grande son decenas de miles (el botón de descargar lo espera).
+            val mine = areaTiles(area.lat, area.lon, area.km)
+            val kept = changeAreas { list -> list.filter { it.id != id } } ?: return@launch
+            removeTiles(mine.filter { it !in kept })
         }
     }
 
@@ -147,16 +170,14 @@ class OfflineMaps private constructor(private val app: Context) {
         }
 
         /** Termina (con [error] o guardando la zona [area]) y suelta sus teselas. */
-        fun finish(error: OfflineError?, area: OfflineArea?) = synchronized(lock) {
-            if (!current) return@synchronized
-            if (area != null) {
-                val list = areas.filter { it.id != area.id } + area
-                writeAreas(list)
-                replaceAreas(list)
+        fun finish(error: OfflineError?, area: OfflineArea?) {
+            if (area != null && changeAreas(allowed = { current }) { list -> list.filter { it.id != area.id } + area } == null) return
+            synchronized(lock) {
+                if (!current) return
+                job = if (error != null) OfflineJob(done.get(), total, bytes.get(), error) else null
+                running = null
+                runningKeys = emptySet()
             }
-            job = if (error != null) OfflineJob(done.get(), total, bytes.get(), error) else null
-            running = null
-            runningKeys = emptySet()
         }
     }
 
@@ -165,10 +186,16 @@ class OfflineMaps private constructor(private val app: Context) {
             ready.await()
             dir.mkdirs()
             val missing = keys.filter { !File(dir, name(it)).isFile }
+            // Las reglas de OpenFreeMap: lo que falta es lo que se pide en esta descarga.
+            if (!withinLimits(missing.size)) {
+                run.finish(OfflineError.TOO_BIG, null)
+                return
+            }
             run.done.set(keys.size - missing.size)
             run.bytes.set(keys.sumOf { File(dir, name(it)).length() })
             run.publish()
             val next = AtomicInteger(0)
+            val fetched = AtomicLong(0)
             val failed = AtomicReference<OfflineError?>(null)
             coroutineScope {
                 List(MAX_DOWNLOADS) {
@@ -178,7 +205,10 @@ class OfflineMaps private constructor(private val app: Context) {
                             if (i >= missing.size) break
                             val size = fetch(run, missing[i], source, userAgent)
                             if (size < 0) failed.compareAndSet(null, if (size == BLOCKED) OfflineError.BLOCKED else OfflineError.NETWORK)
-                            else {
+                            else if (fetched.addAndGet(size) > MAX_BYTES) {
+                                // Las teselas pesaron más que el promedio: se para aquí en vez de pasarse del tope.
+                                failed.compareAndSet(null, OfflineError.TOO_BIG)
+                            } else {
                                 run.done.incrementAndGet()
                                 run.bytes.addAndGet(size)
                                 run.publish()
@@ -203,7 +233,7 @@ class OfflineMaps private constructor(private val app: Context) {
         while (true) {
             currentCoroutineContext().ensureActive()
             val url = source.url(key)
-            val result: Any = if (url == null) Reply.RETRY else runCatching {
+            val result: Any = if (url == null) Reply.RETRY else try {
                 httpGet(app, url, userAgent, setup = { it.setRequestProperty("Accept-Encoding", "gzip") }) { c, code ->
                     when (tileResponse(code)) {
                         // Un portal cautivo contesta 200 con su página: no sirve.
@@ -214,7 +244,10 @@ class OfflineMaps private constructor(private val app: Context) {
                         else -> Reply.RETRY
                     }
                 }
-            }.getOrDefault(Reply.RETRY)
+            } catch (_: IOException) {
+                // Sin red o se cortó: otra vez al rato.
+                Reply.RETRY
+            }
             when (result) {
                 is ByteArray -> {
                     saveTile(run, key, result)
@@ -265,29 +298,52 @@ class OfflineMaps private constructor(private val app: Context) {
         }
     }
 
-    /** Lo que no es de ninguna zona ni de la descarga en curso (y, al arrancar, los temporales que dejó un apagón). */
+    /**
+     * Lo que no es de ninguna zona ni de la descarga en curso (solo con una lista cierta: [trusted]) y, al arrancar, los
+     * temporales que dejó un apagón.
+     */
     private fun sweep(startup: Boolean) {
         val names = dir.list() ?: return
         if (startup) for (n in names) if (n.endsWith(".tmp")) File(dir, n).delete()
+        if (!trusted) return
         val keep = synchronized(lock) { areaKeys + runningKeys }
         removeTiles(strayTiles(names.asList(), keep))
     }
 
-    /** Cambia la lista y sus teselas juntas (con [lock]). */
-    private fun replaceAreas(list: List<OfflineArea>) {
-        areas = list
-        areaKeys = tilesOf(list)
+    /**
+     * Cambia la lista con [change], la guarda y pone sus teselas, todo junto. La cuenta de las teselas (de una zona de
+     * 200 km son decenas de miles) va fuera del candado, que también toma la interfaz; si mientras tanto otra la cambió,
+     * se cuenta de nuevo. Devuelve las teselas de la lista nueva; null si [allowed] ya no lo deja (descarga cancelada).
+     */
+    private fun changeAreas(allowed: () -> Boolean = { true }, change: (List<OfflineArea>) -> List<OfflineArea>): Set<Long>? {
+        while (true) {
+            val before = synchronized(lock) { areas }
+            val after = change(before)
+            val keys = tilesOf(after)
+            synchronized(lock) {
+                if (!allowed()) return null
+                if (areas === before) {
+                    writeAreas(after)
+                    areas = after
+                    areaKeys = keys
+                    return keys
+                }
+            }
+        }
     }
 
-    private fun readAreas() {
-        val list = runCatching {
-            val array = JSONArray(File(dir, AREAS).readText())
-            List(array.length()) { i ->
-                val o = array.getJSONObject(i)
-                OfflineArea(o.getString("id"), o.getDouble("lat"), o.getDouble("lon"), o.getInt("km"), o.getInt("tiles"), o.getLong("bytes"), o.getLong("savedAt"))
-            }
-        }.getOrNull() ?: return
-        synchronized(lock) { replaceAreas(list) }
+    /**
+     * Lee la lista guardada; true si es cierta (no existe, o se leyó bien aunque esté vacía): solo entonces se puede
+     * barrer lo que no es de ninguna zona. False si existe y no se pudo leer (0 bytes o JSON roto).
+     */
+    private fun readAreas(): Boolean {
+        val list = readAreaList(File(dir, AREAS)) ?: return false
+        val keys = tilesOf(list)
+        synchronized(lock) {
+            areas = list
+            areaKeys = keys
+        }
+        return true
     }
 
     private fun writeAreas(list: List<OfflineArea>) {
@@ -300,7 +356,11 @@ class OfflineMaps private constructor(private val app: Context) {
         }
         dir.mkdirs()
         val temp = File.createTempFile(AREAS, ".tmp", dir)
-        temp.writeText(array.toString())
+        // Al disco de verdad antes de renombrar: si se va la corriente, queda la lista vieja o la nueva, nunca vacía.
+        java.io.FileOutputStream(temp).use {
+            it.write(array.toString().toByteArray(Charsets.UTF_8))
+            it.fd.sync()
+        }
         if (!temp.renameTo(File(dir, AREAS))) {
             temp.delete()
             error("No se pudo guardar $AREAS")
@@ -315,9 +375,15 @@ class OfflineMaps private constructor(private val app: Context) {
          */
         const val AVG_TILE_BYTES = 45L * 1024
 
+        /** Topes de OpenFreeMap por descarga para usar sin conexión (openfreemap.org/tos). */
+        const val MAX_TILES = 3_000
+        const val MAX_BYTES = 50L * 1024 * 1024
+
+        /** ¿Una descarga de [tiles] teselas cabe en los dos topes (el peso, con el promedio)? */
+        fun withinLimits(tiles: Int) = tiles <= MAX_TILES && tiles * AVG_TILE_BYTES <= MAX_BYTES
+
         private const val FOLDER = "map_offline"
         private const val AREAS = "areas.json"
-        private const val MAX_DOWNLOADS = 2
         private const val MAX_ATTEMPTS = 5
         private const val RETRY_MS = 5_000L
         private const val SLOW_DOWN_MS = 60_000L
@@ -335,9 +401,14 @@ class OfflineMaps private constructor(private val app: Context) {
     }
 }
 
-/** El zoom de los datos (las del 15–17 salen de él) y los dos más lejanos del mapa inclinado. */
-private const val AREA_ZOOM = 14
-private const val EARTH_KM = 6371.0
+/** Las zonas se bajan en el zoom de los datos (y los dos más lejanos del mapa inclinado). */
+private const val AREA_ZOOM = DATA_ZOOM
+
+/** Media diagonal de una tesela, en veces su lado. */
+private const val HALF_DIAGONAL = 0.7072
+
+/** Ancho de una tesela de las zonas en km a la latitud [lat] (en Mercator es igual de alta que de ancha). */
+private fun areaTileKm(lat: Double) = 2 * PI * EARTH_RADIUS_KM * cos(Math.toRadians(lat)) / (1 shl AREA_ZOOM)
 
 /**
  * Las teselas de una zona: las del 14 cuyo centro cae a [km] o menos de ([lat], [lon]) (más la de en
@@ -347,9 +418,7 @@ internal fun areaTiles(lat: Double, lon: Double, km: Int): List<Long> {
     val n = 1 shl AREA_ZOOM
     val cx = tileX(lon, AREA_ZOOM)
     val cy = tileY(lat, AREA_ZOOM)
-    // Ancho de una tesela en km a esta latitud (en Mercator es igual de alta que de ancha).
-    val tileKm = 2 * PI * EARTH_KM * cos(Math.toRadians(lat)) / n
-    val r = km / tileKm + 1
+    val r = km / areaTileKm(lat) + 1
     val near = ArrayList<Pair<Long, Double>>()
     for (x in floor(cx - r).toInt().coerceAtLeast(0)..ceil(cx + r).toInt().coerceAtMost(n - 1)) {
         for (y in floor(cy - r).toInt().coerceAtLeast(0)..ceil(cy + r).toInt().coerceAtMost(n - 1)) {
@@ -371,6 +440,18 @@ internal fun tilesOf(areas: List<OfflineArea>): Set<Long> {
 }
 
 /** De los archivos [names] de la carpeta, las teselas (`z_x_y`) que no están en [keep]; lo demás no se toca. */
+/** Las zonas guardadas en [file]: vacía si no existe (nunca guardó una) o trae `[]`; null si existe y no se puede leer. */
+internal fun readAreaList(file: File): List<OfflineArea>? {
+    if (!file.exists()) return emptyList()
+    return runCatching {
+        val array = JSONArray(file.readText())
+        List(array.length()) { i ->
+            val o = array.getJSONObject(i)
+            OfflineArea(o.getString("id"), o.getDouble("lat"), o.getDouble("lon"), o.getInt("km"), o.getInt("tiles"), o.getLong("bytes"), o.getLong("savedAt"))
+        }
+    }.getOrNull()
+}
+
 internal fun strayTiles(names: List<String>, keep: Set<Long>): List<Long> = names.mapNotNull { name ->
     val parts = name.split('_')
     if (parts.size != 3) return@mapNotNull null
@@ -380,15 +461,3 @@ internal fun strayTiles(names: List<String>, keep: Set<Long>): List<Long> = name
 
 /** Misma zona = mismo centro (a ~100 m) y radio: volver a bajarla la actualiza en vez de repetirla. */
 internal fun areaId(lat: Double, lon: Double, km: Int) = String.format(Locale.US, "%.3f_%.3f_%d", lat, lon, km)
-
-/** Distancia en km sobre la Tierra (haversine). */
-internal fun distanceKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    val dLat = Math.toRadians(lat2 - lat1)
-    val dLon = Math.toRadians(lon2 - lon1)
-    val h = sin(dLat / 2).let { it * it } + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).let { it * it }
-    return 2 * EARTH_KM * asin(sqrt(h.coerceAtMost(1.0)))
-}
-
-/** Lo contrario de [tileX] y [tileY]: la longitud y la latitud de una coordenada de tesela. */
-internal fun tileLon(x: Double, z: Int): Double = x / (1 shl z) * 360.0 - 180.0
-internal fun tileLat(y: Double, z: Int): Double = Math.toDegrees(atan(sinh(PI * (1 - 2 * y / (1 shl z)))))

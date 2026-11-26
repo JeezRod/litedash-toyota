@@ -1,5 +1,7 @@
 package com.irvingguerra.litedash
 
+import com.irvingguerra.litedash.core.ui.LocalCardLook
+import com.irvingguerra.litedash.core.ui.skinSurface
 import com.irvingguerra.litedash.core.ui.Radius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -16,10 +18,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.annotation.StringRes
+import androidx.compose.ui.res.stringResource
 import com.irvingguerra.litedash.core.ui.Icon
 import com.irvingguerra.litedash.core.ui.Label
 import com.irvingguerra.litedash.core.ui.LocalColors
 import com.irvingguerra.litedash.core.ui.Typography
+import com.irvingguerra.litedash.core.ui.Https
 
 /**
  * Aviso arriba del tablero (inicio, versión nueva, recordatorio): texto y sus
@@ -33,7 +38,8 @@ fun Notice(text: String, icon: ImageVector? = null, iconColor: Color? = null, bu
         .fillMaxWidth()
         .padding(horizontal = 16.dp, vertical = 4.dp)
         .clip(RoundedCornerShape(Radius.card))
-        .background(c.surface)
+        // Con la piel de las tarjetas, pero siempre bien visible: es un aviso.
+        .skinSurface(LocalCardLook.current, c, RoundedCornerShape(Radius.card), floor = 0.8f)
         .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
     val label = @Composable { m: Modifier ->
         Row(m, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -55,3 +61,10 @@ fun Notice(text: String, icon: ImageVector? = null, iconColor: Color? = null, bu
         }
     }
 }
+
+/**
+ * El texto de una descarga que falló ([res], p. ej. «revisa tu internet») o, si la hora de la pantalla quedó atrás (sin
+ * pila y sin red: 1970, 2015…), que la fecha está mal: ahí todo HTTPS falla y no es culpa del internet.
+ */
+@Composable
+fun downloadError(@StringRes res: Int): String = stringResource(if (Https.clockLooksWrong()) R.string.clock_wrong else res)

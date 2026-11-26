@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="weather_switch">Wetter</string>
+    <string name="reminder_pick_date">Wann ist %1$s fällig?</string>
+    <string name="tab_home">Start</string>
+    <string name="tab_interface">Oberfläche</string>
+    <string name="accent_title">Akzentfarbe</string>
+    <string name="accent_help">Schalter, Tasten, Play und Fortschrittsbalken. Kacheln und Hintergrund bleiben gleich.</string>
+    <string name="cards_title">Karten</string>
+    <string name="cards_help">So sehen die Karten in der ganzen App aus: ihre Farbe und ob der Hintergrund durchscheint.</string>
+    <string name="cards_solid">Deckend</string>
+    <string name="cards_glass">Glas</string>
+    <string name="cards_opacity">Wie sichtbar</string>
+    <string name="cards_glass_help">Dein Hintergrundbild erscheint unscharf hinter jeder Karte; über dem Karten-Hintergrund erscheint die Karte abgedämpft.</string>
+    <string name="cards_themes">Kombinationen</string>
+    <string name="language_search">Finde deine Sprache</string>
+    <string name="language_not_found">Diese Sprache gibt es noch nicht. Hilf uns beim Übersetzen auf litedash.dev/translate.</string>
+    <string name="factory_look">Standard</string>
+    <string name="tab_language_units">Sprache &amp; Einheiten</string>
+    <string name="tab_theme_brightness">Design &amp; Helligkeit</string>
+    <plurals name="language_show_all">
+        <item quantity="one">Sprache anzeigen (%d)</item>
+        <item quantity="other">Alle Sprachen anzeigen (%d)</item>
+    </plurals>
+    <string name="language_show_less">Weniger anzeigen</string>
+</resources>

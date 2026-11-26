@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="road_speed">Скорость</string>
+    <string name="road_speed_text">Только число</string>
+    <string name="road_speed_gauge">Спидометр</string>
+    <string name="road_speed_show">Показывать скорость</string>
+    <string name="trip_time">Время</string>
+    <string name="trip_average">Средняя</string>
+    <string name="road_trip_distance">Расстояние</string>
+    <string name="trip_heading">Курс</string>
+    <string-array name="compass_points">
+        <item>С</item>
+        <item>СВ</item>
+        <item>В</item>
+        <item>ЮВ</item>
+        <item>Ю</item>
+        <item>ЮЗ</item>
+        <item>З</item>
+        <item>СЗ</item>
+    </string-array>
+    <string name="value_with_unit">%1$s %2$s</string>
+    <string name="two_parts">%1$s · %2$s</string>
+    <string name="weather_degrees">%1$d°</string>
+    <string name="weather_range">%1$d° / %2$d°</string>
+    <string name="page_n">Страница %1$d</string>
+    <string name="page_add">Добавить страницу</string>
+    <string name="page_remove">Убрать страницу</string>
+    <string name="page_remove_question">Убрать страницу %1$d?</string>
+    <string name="page_remove_message">Её виджеты исчезнут; первая страница и остальные останутся.</string>
+    <string name="page_background_title">Фон страницы %1$d</string>
+    <string name="page_background_image">Изображение</string>
+    <string name="page_background_map">Карта</string>
+    <string name="map_backdrop_help">Карта следует за тобой позади виджетов, а ты — на свободном месте. Её стиль — из «Настройки → Приложения → Навигация»; без интернета она использует твои офлайн-районы.</string>
+    <string name="map_backdrop_has_widget">На этой странице есть виджет «Карта»: с картой на фоне их будет две.</string>
+    <string name="map_backdrop_remove_widget">Убрать виджет «Карта»</string>
+</resources>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="weather_switch">Időjárás</string>
+    <string name="reminder_pick_date">Mikor esedékes: %1$s?</string>
+    <string name="tab_home">Kezdőképernyő</string>
+    <string name="tab_interface">Felület</string>
+    <string name="accent_title">Felület színe</string>
+    <string name="accent_help">Kapcsolók, gombok, lejátszás és folyamatjelzők. A kártyák és a háttér nem változnak.</string>
+    <string name="cards_title">Kártyák</string>
+    <string name="cards_help">Milyenek a kártyák az egész alkalmazásban: a színük, és átlátszik-e a háttér.</string>
+    <string name="cards_solid">Tömör</string>
+    <string name="cards_glass">Üveg</string>
+    <string name="cards_opacity">Mennyire látszanak</string>
+    <string name="cards_glass_help">A háttérképed elmosódva látszik minden kártya mögött; térképes háttér fölött a térkép tompítva látszik.</string>
+    <string name="cards_themes">Kombinációk</string>
+    <string name="language_search">Keresd meg a nyelved</string>
+    <string name="language_not_found">Ez a nyelv még nincs meg. Segíts lefordítani a litedash.dev/translate oldalon.</string>
+    <string name="factory_look">Alapértelmezett</string>
+    <string name="tab_language_units">Nyelv és mértékegységek</string>
+    <string name="tab_theme_brightness">Téma és fényerő</string>
+    <plurals name="language_show_all">
+        <item quantity="one">Nyelv megjelenítése (%d)</item>
+        <item quantity="other">Összes nyelv (%d)</item>
+    </plurals>
+    <string name="language_show_less">Kevesebb</string>
+</resources>

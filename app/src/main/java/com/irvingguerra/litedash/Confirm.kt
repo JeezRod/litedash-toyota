@@ -36,6 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.irvingguerra.litedash.core.ui.Divider
 import com.irvingguerra.litedash.core.ui.Button
 import com.irvingguerra.litedash.core.ui.Label
 import com.irvingguerra.litedash.core.ui.LocalColors
@@ -107,10 +108,11 @@ internal fun Confirmed(
     message: String? = null,
     primary: Boolean = false,
     destructive: Boolean = true,
+    enabled: Boolean = true,
     action: () -> Unit,
 ) {
     val alerts = LocalAlerts.current
-    Button(label, { alerts.ask(Alert(question, confirm, message, destructive, action)) }, primary = primary)
+    Button(label, { alerts.ask(Alert(question, confirm, message, destructive, action)) }, primary = primary, enabled = enabled)
 }
 
 @Composable
@@ -147,7 +149,7 @@ private fun AlertCard(alert: Alert, progress: () -> Float, onCancel: () -> Unit,
                 Label(alert.title, Typography.subtitle.copy(fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center))
                 alert.message?.let { Label(it, Typography.small.copy(textAlign = TextAlign.Center), c.textMuted) }
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(c.line))
+            Divider()
             Row(Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                 AlertButton(stringResource(R.string.cancel), c.text, FontWeight.Normal, Modifier.weight(1f), onCancel)
                 Box(Modifier.width(1.dp).height(52.dp).background(c.line))

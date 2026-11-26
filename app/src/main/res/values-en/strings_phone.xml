@@ -3,6 +3,10 @@
 <resources>
     <string name="phone_section">Phone</string>
     <string name="phone_help">Your LiteDash account lives in the LiteDash Connect app on your phone.</string>
+    <string name="phone_permission">Permission needed</string>
+    <string name="phone_permission_body">To talk to your phone, Android asks you to let LiteDash use the local network (Nearby devices).</string>
+    <string name="local_network_allow">Allow</string>
+    <string name="local_network_settings">Permissions</string>
     <string name="phone_no_wifi">Your screen has no Wi-Fi</string>
     <string name="phone_no_wifi_body">Your phone and your screen talk over Wi-Fi. Pick how:</string>
     <string name="phone_use_phone">Use my phone’s internet</string>
@@ -12,20 +16,24 @@
     <string name="phone_open_wifi">Open Wi-Fi</string>
     <string name="phone_open_hotspot">Open hotspot</string>
     <string name="phone_waiting">Waiting for your phone…</string>
-    <string name="phone_link_code">Code %1$s · expires in 5 minutes</string>
+    <plurals name="phone_link_code">
+        <item quantity="one">Code %1$s · expires in %2$d minute</item>
+        <item quantity="other">Code %1$s · expires in %2$d minutes</item>
+    </plurals>
     <string name="phone_step_install">Install LiteDash Connect and create your account</string>
     <string name="phone_step_tap">Tap “Link my screen”</string>
     <string name="phone_step_scan">Point the camera at this code</string>
     <string name="phone_connected">Connected</string>
     <string name="phone_searching">Looking for your phone…</string>
     <string name="phone_model_app">%1$s · LiteDash Connect %2$s</string>
-    <string name="phone_data">Link</string>
-    <string name="phone_data_ok">Your phone and the screen are talking</string>
+    <string name="phone_link">Link</string>
+    <string name="phone_link_ok">Your phone and the screen are talking</string>
     <string name="phone_music_blocked">To see your music here, open LiteDash Connect and tap “Allow” under Link</string>
-    <string name="phone_data_no_network">The screen isn’t on any network with your phone</string>
-    <string name="phone_data_open_app">Open LiteDash Connect on your phone and connect it to this same network</string>
+    <string name="phone_link_no_network">The screen isn’t on any network with your phone</string>
+    <string name="phone_link_open_app">Your phone isn\'t answering: unlock it or open LiteDash Connect on this same network</string>
     <string name="phone_sound">Sound</string>
     <string name="phone_sound_ok">Bluetooth connected · %1$s</string>
+    <string name="phone_sound_ok_plain">Bluetooth connected</string>
     <string name="phone_sound_missing">Can’t hear it? Connect Bluetooth from the stereo</string>
     <string name="phone_sound_calls">Bluetooth is connected for calls only, so it plays on your phone. Connect it from the stereo, or turn on “Media audio” for this stereo on your phone</string>
     <string name="phone_calls_only">Bluetooth for calls only</string>
@@ -39,4 +47,11 @@
     <string name="phone_unlink_message">To connect it again you\'ll have to scan the code again from LiteDash Connect.</string>
     <string name="phone_no_sound">No sound? Connect Bluetooth</string>
     <string name="music_mode_phone">While your phone is connected and plays music, the Music widget shows and controls it. When it leaves, it goes back to what you had.</string>
+    <!-- Lo que ve el celular cuando no se pudo cambiar tu auto (carJob failed). -->
+    <string name="phone_job_unknown">The catalog info for that car is missing</string>
+    <string name="phone_job_no_finish">This model has no finishes</string>
+    <string name="phone_job_damaged">The file arrived damaged</string>
+    <string name="phone_job_unexpected">The screen didn\'t ask for that file</string>
+    <string name="phone_job_busy">The screen is downloading something else; try again in a moment</string>
+    <string name="phone_job_install_failed">The screen couldn\'t install it</string>
 </resources>

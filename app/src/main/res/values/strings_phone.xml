@@ -3,6 +3,10 @@
 <resources>
     <string name="phone_section">Celular</string>
     <string name="phone_help">Tu cuenta de LiteDash vive en la app LiteDash Connect de tu celular.</string>
+    <string name="phone_permission">Falta un permiso</string>
+    <string name="phone_permission_body">Para hablar con tu celular, Android pide que permitas a LiteDash usar la red local (Dispositivos cercanos).</string>
+    <string name="local_network_allow">Permitir</string>
+    <string name="local_network_settings">Permisos</string>
     <string name="phone_no_wifi">Tu pantalla no tiene Wi-Fi</string>
     <string name="phone_no_wifi_body">Tu celular y tu pantalla se hablan por Wi-Fi. Elige cómo:</string>
     <string name="phone_use_phone">Usar el internet de mi celular</string>
@@ -12,20 +16,25 @@
     <string name="phone_open_wifi">Abrir Wi-Fi</string>
     <string name="phone_open_hotspot">Abrir hotspot</string>
     <string name="phone_waiting">Esperando a tu celular…</string>
-    <string name="phone_link_code">Código %1$s · vence en 5 minutos</string>
+    <plurals name="phone_link_code">
+        <item quantity="one">Código %1$s · vence en %2$d minuto</item>
+        <item quantity="many">Código %1$s · vence en %2$d minutos</item>
+        <item quantity="other">Código %1$s · vence en %2$d minutos</item>
+    </plurals>
     <string name="phone_step_install">Instala LiteDash Connect y crea tu cuenta</string>
     <string name="phone_step_tap">Toca “Vincular mi pantalla”</string>
     <string name="phone_step_scan">Apunta la cámara a este código</string>
     <string name="phone_connected">Conectado</string>
     <string name="phone_searching">Buscando tu celular…</string>
     <string name="phone_model_app">%1$s · LiteDash Connect %2$s</string>
-    <string name="phone_data">Enlace</string>
-    <string name="phone_data_ok">Tu celular y la pantalla se están hablando</string>
+    <string name="phone_link">Enlace</string>
+    <string name="phone_link_ok">Tu celular y la pantalla se están hablando</string>
     <string name="phone_music_blocked">Para ver aquí tu música, abre LiteDash Connect y en Enlace toca «Permitir»</string>
-    <string name="phone_data_no_network">La pantalla no está en ninguna red con tu celular</string>
-    <string name="phone_data_open_app">Abre LiteDash Connect en tu celular y conéctalo a esta misma red</string>
+    <string name="phone_link_no_network">La pantalla no está en ninguna red con tu celular</string>
+    <string name="phone_link_open_app">Tu celular no contesta: desbloquéalo o abre LiteDash Connect en esta misma red</string>
     <string name="phone_sound">Sonido</string>
     <string name="phone_sound_ok">Bluetooth conectado · %1$s</string>
+    <string name="phone_sound_ok_plain">Bluetooth conectado</string>
     <string name="phone_sound_missing">¿No se oye? Conecta el Bluetooth desde el estéreo</string>
     <string name="phone_sound_calls">El Bluetooth quedó solo para llamadas, por eso suena en tu celular. Conéctalo desde el estéreo, o en tu celular activa «Audio multimedia» para este estéreo</string>
     <string name="phone_calls_only">Bluetooth solo para llamadas</string>
@@ -39,4 +48,11 @@
     <string name="phone_unlink_message">Para volver a conectarlo tendrás que escanear el código otra vez desde LiteDash Connect.</string>
     <string name="phone_no_sound">¿Sin sonido? Conecta el Bluetooth</string>
     <string name="music_mode_phone">Mientras tu celular esté conectado y ponga música, el widget Música la muestra y controla. Cuando se vaya, regresa a lo que tenías.</string>
+    <!-- Lo que ve el celular cuando no se pudo cambiar tu auto (carJob failed). -->
+    <string name="phone_job_unknown">Falta la información de ese auto del catálogo</string>
+    <string name="phone_job_no_finish">Este modelo no tiene acabados</string>
+    <string name="phone_job_damaged">El archivo llegó dañado</string>
+    <string name="phone_job_unexpected">La pantalla no pidió ese archivo</string>
+    <string name="phone_job_busy">La pantalla está bajando otra cosa; intenta en un momento</string>
+    <string name="phone_job_install_failed">No se pudo instalar en la pantalla</string>
 </resources>

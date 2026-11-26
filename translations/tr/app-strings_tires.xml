@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tires_error_usb_missing">USB lastik alıcısı takılı değil</string>
+    <string name="tires_error_usb_denied">USB alıcı için izin yok</string>
+    <string name="tires_error_usb_open">USB alıcı açılamadı</string>
+    <string name="tires_error_usb_unplugged">USB alıcı çıkarıldı</string>
+    <string name="tires_error_usb_lost">USB alıcıyla bağlantı kayboldu</string>
+    <string name="tires_error_swap">Alıcı lastik değişimini onaylamadı</string>
+    <string name="tires_tap_hint">Sensörünü ayarlamak veya taşımak için bir lastiğe dokunun</string>
+</resources>
