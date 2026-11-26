@@ -246,7 +246,7 @@ enum class BarItem(val stored: String) {
  * Android Auto / CarPlay, voz y Ajustes. Teléfono se agrega si se quiere.
  */
 private val DEFAULT_BAR = listOf(
-    BarItem.HOME, BarItem.APPS, BarItem.VOLUME, BarItem.MUSIC, BarItem.FAVORITES, BarItem.NAVIGATE, BarItem.BLUETOOTH, BarItem.PROJECTION, BarItem.VOICE,
+    BarItem.HOME, BarItem.APPS, BarItem.VOLUME, BarItem.MUTE, BarItem.MUSIC, BarItem.FAVORITES, BarItem.NAVIGATE, BarItem.BLUETOOTH, BarItem.PROJECTION, BarItem.VOICE,
 )
 
 /** Las opciones de la barra de antes de poder editarla: si alguna se guardó, se respeta lo de esa persona. */
